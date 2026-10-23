@@ -1,0 +1,16 @@
+# Computador C: solo el servicio de pedidos.
+# Antes de usarlo, copiar .env.ejemplo como .env y escribir las IP de A y B.
+# Uso: docker compose -f docker-compose.computador-c.yml up -d --build
+name: ventas-computador-c
+
+services:
+  pedidos:
+    build: ./pedidos
+    container_name: servicio-pedidos
+    ports:
+      - "8000:8000"
+    environment:
+      # Usuarios y productos corren en otros computadores: se llega a ellos por
+      # la IP de cada equipo, que se lee del archivo .env. No se usa localhost.
+      USUARIOS_URL: ${USUARIOS_URL:?Falta USUARIOS_URL en el archivo .env (IP del computador A)}
+      PRODUCTOS_URL: ${PRODUCTOS_URL:?Falta PRODUCTOS_URL en el archivo .env (IP del computador B)}

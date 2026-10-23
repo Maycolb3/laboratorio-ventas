@@ -12,11 +12,12 @@ from flask import Flask, jsonify, request
 
 app = Flask(__name__)
 
-# Direcciones de los otros servicios. Dentro de Docker se usan los NOMBRES de
+# Direcciones de los otros servicios. Por defecto se usan los NOMBRES de
 # servicio (usuarios, productos), que el DNS interno de Docker traduce a la IP
-# de cada contenedor. Los valores por defecto solo sirven para pruebas sin Docker.
-USUARIOS_URL = os.environ.get("USUARIOS_URL", "http://localhost:8001")
-PRODUCTOS_URL = os.environ.get("PRODUCTOS_URL", "http://localhost:8002")
+# de cada contenedor. Si cada servicio corre en un computador distinto, se
+# cambian por la IP de ese computador (ver archivo .env en el README).
+USUARIOS_URL = os.environ.get("USUARIOS_URL", "http://usuarios:8001")
+PRODUCTOS_URL = os.environ.get("PRODUCTOS_URL", "http://productos:8002")
 TIEMPO_ESPERA = 3  # segundos máximos para esperar la respuesta de otro servicio
 
 # Pedidos guardados en memoria: se pierden cuando el contenedor se detiene.

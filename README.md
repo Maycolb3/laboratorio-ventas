@@ -375,6 +375,46 @@ docker compose start pedidos
 
 Resultado esperado: usuarios y productos responden aunque pedidos esté detenido.
 
+## Paso 10. Cada servicio en un computador distinto
+
+Los pasos anteriores corren los tres contenedores en un mismo equipo. Para repartirlos, cada computador levanta un solo servicio con su propio archivo compose, y pedidos llega a los otros dos por la **IP de cada equipo**. En ningún caso se usa `localhost`.
+
+| Computador | Servicio | Archivo | Puerto |
+|---|---|---|---|
+| A | usuarios  | `docker-compose.computador-a.yml` | 8001 |
+| B | productos | `docker-compose.computador-b.yml` | 8002 |
+| C | pedidos   | `docker-compose.computador-c.yml` + `.env` | 8000 |
+
+Resumen (la guía paso a paso completa está en el documento del grupo):
+
+1. Los tres equipos en la misma red (mismo Wi-Fi o Tailscale). Cada uno anota su IP con `ipconfig` (Windows) o `ipconfig getifaddr en0` (Mac).
+2. En Windows, abrir el puerto del servicio en PowerShell como administrador (8001 en A, 8002 en B, 8000 en C):
+
+   ```powershell
+   New-NetFirewallRule -DisplayName "Laboratorio ventas" -Direction Inbound -Protocol TCP -LocalPort 8001 -Action Allow -Profile Any
+   ```
+
+3. A y B levantan su servicio:
+
+   ```powershell
+   docker compose -f docker-compose.computador-a.yml up -d --build   # en A
+   docker compose -f docker-compose.computador-b.yml up -d --build   # en B
+   ```
+
+4. C copia `.env.ejemplo` como `.env`, escribe las IP de A y B, y levanta pedidos:
+
+   ```powershell
+   Copy-Item .env.ejemplo .env
+   notepad .env
+   docker compose -f docker-compose.computador-c.yml up -d --build
+   ```
+
+   `.env` está en `.gitignore` porque las IP cambian según el equipo y la red.
+
+5. Las pruebas se hacen desde cualquier equipo con la IP de C, por ejemplo `Invoke-RestMethod http://192.168.0.12:8000/salud`. En `Enviar-Pedido`, cambiar `localhost` por la IP de C.
+
+Resultado esperado: las compras funcionan igual que en un solo equipo, y en `docker compose -f docker-compose.computador-c.yml logs pedidos` las líneas `->` muestran las IP de A y B.
+
 ---
 
 ## Equivalentes en macOS (Terminal)

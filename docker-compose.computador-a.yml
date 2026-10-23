@@ -1,0 +1,10 @@
+# Computador A: solo el servicio de usuarios.
+# Uso: docker compose -f docker-compose.computador-a.yml up -d --build
+name: ventas-computador-a
+
+services:
+  usuarios:
+    build: ./usuarios
+    container_name: servicio-usuarios
+    ports:
+      - "8001:8001"   # el computador C llama a http://<IP-de-A>:8001
