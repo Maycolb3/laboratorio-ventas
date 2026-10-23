@@ -1,0 +1,11 @@
+# Archivos generados por Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Archivos del sistema operativo y editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

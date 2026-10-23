@@ -1,0 +1,38 @@
+# Define los tres servicios, cómo se construyen y la red que los une.
+services:
+  usuarios:
+    build: ./usuarios
+    container_name: servicio-usuarios
+    ports:
+      - "8001:8001"   # puerto_del_equipo:puerto_del_contenedor
+    networks:
+      - red_ventas
+
+  productos:
+    build: ./productos
+    container_name: servicio-productos
+    ports:
+      - "8002:8002"
+    networks:
+      - red_ventas
+
+  pedidos:
+    build: ./pedidos
+    container_name: servicio-pedidos
+    ports:
+      - "8000:8000"
+    environment:
+      # Se usan los nombres de servicio, NO localhost: dentro de un contenedor,
+      # localhost es el propio contenedor de pedidos.
+      USUARIOS_URL: http://usuarios:8001
+      PRODUCTOS_URL: http://productos:8002
+    depends_on:
+      - usuarios
+      - productos
+    networks:
+      - red_ventas
+
+networks:
+  red_ventas:
+    name: red_ventas
+    driver: bridge
