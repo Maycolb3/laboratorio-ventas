@@ -49,6 +49,7 @@ def servicio_no_disponible(error):
 
 
 @app.get("/salud")
+@app.get("/health")  # mismo endpoint en inglés, para monitores que consultan /health
 def salud():
     return jsonify({"servicio": "pedidos", "estado": "en ejecución", "contenedor": socket.gethostname()})
 

@@ -17,6 +17,7 @@ USUARIOS = {
 
 
 @app.get("/salud")
+@app.get("/health")  # mismo endpoint en inglés, para monitores que consultan /health
 def salud():
     # socket.gethostname() devuelve el ID del contenedor: sirve como evidencia
     # de que cada servicio corre en un contenedor distinto.
