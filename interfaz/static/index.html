@@ -61,20 +61,38 @@
   dt { color: var(--tenue); }
   dd { margin: 0; font-family: var(--mono); overflow-wrap: anywhere; }
 
-  /* Formulario */
-  form { display: grid; grid-template-columns: 1fr 1fr 96px; gap: 12px; align-items: end; }
-  @media (max-width: 560px) { form { grid-template-columns: 1fr; } }
-  label { display: grid; gap: 5px; }
-  input { font: 14px var(--mono); padding: 8px 10px; border: 1px solid var(--linea); border-radius: 3px;
+  /* Formularios */
+  #formulario { display: grid; grid-template-columns: 1fr 1fr 96px; gap: 12px; align-items: end; }
+  @media (max-width: 560px) { #formulario { grid-template-columns: 1fr; } }
+  label { display: grid; gap: 5px; min-width: 0; }
+  input, select { font: 14px var(--mono); padding: 8px 10px; border: 1px solid var(--linea); border-radius: 3px;
           background: var(--superficie); color: var(--tinta); width: 100%; }
-  input:focus { outline: none; border-color: var(--tinta); }
+  input:focus, select:focus { outline: none; border-color: var(--tinta); }
+  input[readonly] { color: var(--suave); background: transparent; }
   button { font: 13px var(--sans); padding: 8px 14px; border-radius: 3px; cursor: pointer;
            border: 1px solid var(--linea); background: transparent; color: var(--tinta); }
   button:hover { border-color: var(--tinta); }
   button.primario { background: var(--tinta); border-color: var(--tinta); color: var(--fondo); font-weight: 500; }
   button.primario:hover { opacity: .85; }
   button:disabled { opacity: .5; cursor: wait; }
-  form button { grid-column: 1 / -1; justify-self: start; }
+  #formulario button { grid-column: 1 / -1; justify-self: start; }
+
+  /* Gestión (CRUD) de usuarios y productos */
+  .crud { display: grid; gap: 10px; align-items: end; margin-bottom: 10px; }
+  .crud.usuarios { grid-template-columns: 72px minmax(0, 1fr) 116px; }
+  .crud.productos { grid-template-columns: 72px minmax(0, 1fr) 104px 84px; }
+  @media (max-width: 560px) { .crud.usuarios, .crud.productos { grid-template-columns: 1fr 1fr; } }
+  .crud .acciones { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+  .crud .acciones button { padding: 6px 11px; }
+  .metodo { font: 10px var(--mono); letter-spacing: .06em; opacity: .6; margin-left: 5px; }
+  .resultado-crud { min-height: 22px; margin-bottom: 14px; font: 12px var(--mono); color: var(--suave);
+                    display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+  .resultado-crud .detalle { color: var(--tenue); overflow-wrap: anywhere; }
+  tr.seleccionado td { background: var(--superficie); font-weight: 600; }
+
+  /* Registro con desplazamiento propio */
+  .desplazable { max-height: 380px; overflow: auto; border-bottom: 1px solid var(--linea); }
+  .desplazable th { position: sticky; top: 0; z-index: 1; background: var(--fondo); padding-top: 4px; }
 
   /* Recorrido de la solicitud */
   .recorrido { list-style: none; margin: 26px 0 0; padding: 0; }
@@ -102,7 +120,8 @@
   /* Tablas */
   .tabla { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th { text-align: left; padding: 0 10px 8px 0; border-bottom: 1px solid var(--tinta);
+  /* La línea bajo el encabezado es una sombra para que siga visible cuando el encabezado queda fijo al desplazarse */
+  th { text-align: left; padding: 0 10px 8px 0; box-shadow: inset 0 -1px 0 var(--tinta);
        font: 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--tenue); font-weight: 400; white-space: nowrap; }
   td { padding: 9px 10px 9px 0; border-bottom: 1px solid var(--linea); white-space: nowrap; }
   .num { text-align: right; font-variant-numeric: tabular-nums; }
@@ -170,6 +189,7 @@
       <h2>Pruebas del laboratorio</h2>
       <p>Casos de los pasos 4 a 6 de la guía y las validaciones adicionales.</p>
       <p>Haga clic en una fila para ejecutar solo ese caso.</p>
+      <p>Los casos usan los datos iniciales (U01, U03, P01, P03). Si los cambia en la sección 04, algunos resultados cambiarán.</p>
     </div>
     <div>
       <div class="barra">
@@ -188,32 +208,52 @@
   <section class="seccion">
     <div class="cabeza">
       <div class="etiqueta-mono">04</div>
-      <h2>Datos de cada servicio</h2>
-      <p>Usuarios y productos son datos fijos. Los pedidos viven en memoria y se pierden al detener el contenedor.</p>
-      <button id="recargar">Recargar datos</button>
+      <h2>Gestión de usuarios y productos</h2>
+      <p>Crear, consultar, modificar y eliminar. Cada botón muestra el método HTTP que envía al servicio.</p>
+      <p>Haga clic en una fila para cargarla en el formulario. El ID lo asigna el servicio al crear.</p>
+      <p>Los cambios viven en memoria: se pierden al reiniciar el contenedor.</p>
     </div>
-    <div>
-      <div class="columnas bloque">
-        <div>
-          <div class="etiqueta-mono subtitulo">Usuarios</div>
-          <div class="tabla"><table>
-            <thead><tr><th>ID</th><th>Nombre</th><th>Estado</th></tr></thead>
-            <tbody id="usuarios"></tbody>
-          </table></div>
-        </div>
-        <div>
-          <div class="etiqueta-mono subtitulo">Productos</div>
-          <div class="tabla"><table>
-            <thead><tr><th>ID</th><th>Nombre</th><th class="num">Precio</th><th class="num">Existencias</th></tr></thead>
-            <tbody id="productos"></tbody>
-          </table></div>
-        </div>
-      </div>
-      <div class="bloque">
-        <div class="etiqueta-mono subtitulo">Pedidos</div>
+    <div class="columnas">
+      <div>
+        <div class="etiqueta-mono subtitulo">Usuarios · servicio de usuarios</div>
+        <form class="crud usuarios" data-servicio="usuarios">
+          <label><span class="etiqueta-mono">ID</span><input name="id" placeholder="U01" autocomplete="off"></label>
+          <label><span class="etiqueta-mono">Nombre</span><input name="nombre" autocomplete="off"></label>
+          <label><span class="etiqueta-mono">Estado</span>
+            <select name="estado"><option value="activo">activo</option><option value="inactivo">inactivo</option></select></label>
+          <div class="acciones">
+            <button class="primario" type="submit" data-accion="crear">Crear<span class="metodo">POST</span></button>
+            <button type="button" data-accion="consultar">Consultar<span class="metodo">GET</span></button>
+            <button type="button" data-accion="modificar">Modificar<span class="metodo">PUT</span></button>
+            <button type="button" data-accion="eliminar">Eliminar<span class="metodo">DELETE</span></button>
+            <button type="button" data-accion="limpiar">Limpiar</button>
+          </div>
+        </form>
+        <div class="resultado-crud" id="resultado-usuarios"></div>
         <div class="tabla"><table>
-          <thead><tr><th>ID</th><th>Usuario</th><th>Producto</th><th class="num">Cant.</th><th class="num">Precio unit.</th><th class="num">Total</th><th>Fecha UTC</th></tr></thead>
-          <tbody id="pedidos"></tbody>
+          <thead><tr><th>ID</th><th>Nombre</th><th>Estado</th></tr></thead>
+          <tbody id="usuarios"></tbody>
+        </table></div>
+      </div>
+      <div>
+        <div class="etiqueta-mono subtitulo">Productos · servicio de productos</div>
+        <form class="crud productos" data-servicio="productos">
+          <label><span class="etiqueta-mono">ID</span><input name="id" placeholder="P01" autocomplete="off"></label>
+          <label><span class="etiqueta-mono">Nombre</span><input name="nombre" autocomplete="off"></label>
+          <label><span class="etiqueta-mono">Precio</span><input name="precio" type="number" min="1" step="1"></label>
+          <label><span class="etiqueta-mono">Existencias</span><input name="existencias" type="number" min="0" step="1"></label>
+          <div class="acciones">
+            <button class="primario" type="submit" data-accion="crear">Crear<span class="metodo">POST</span></button>
+            <button type="button" data-accion="consultar">Consultar<span class="metodo">GET</span></button>
+            <button type="button" data-accion="modificar">Modificar<span class="metodo">PUT</span></button>
+            <button type="button" data-accion="eliminar">Eliminar<span class="metodo">DELETE</span></button>
+            <button type="button" data-accion="limpiar">Limpiar</button>
+          </div>
+        </form>
+        <div class="resultado-crud" id="resultado-productos"></div>
+        <div class="tabla"><table>
+          <thead><tr><th>ID</th><th>Nombre</th><th class="num">Precio</th><th class="num">Existencias</th></tr></thead>
+          <tbody id="productos"></tbody>
         </table></div>
       </div>
     </div>
@@ -222,13 +262,32 @@
   <section class="seccion">
     <div class="cabeza">
       <div class="etiqueta-mono">05</div>
+      <h2>Pedidos registrados</h2>
+      <p>Viven en memoria en el servicio de pedidos y se pierden al detener el contenedor.</p>
+      <button id="recargar">Recargar datos</button>
+    </div>
+    <div class="tabla"><table>
+      <thead><tr><th>ID</th><th>Usuario</th><th>Producto</th><th class="num">Cant.</th><th class="num">Precio unit.</th><th class="num">Total</th><th>Fecha UTC</th></tr></thead>
+      <tbody id="pedidos"></tbody>
+    </table></div>
+  </section>
+
+  <section class="seccion">
+    <div class="cabeza">
+      <div class="etiqueta-mono">06</div>
       <h2>Registro de solicitudes</h2>
       <p>Cada petición que hizo esta página, con la dirección real del servicio que la atendió: nombre de contenedor o IP del computador.</p>
     </div>
-    <div class="tabla"><table class="registro">
-      <thead><tr><th>Hora</th><th>Método</th><th>Destino</th><th>Código</th><th class="num">Tiempo</th></tr></thead>
-      <tbody id="registro"><tr><td colspan="5" class="vacio">Sin solicitudes todavía.</td></tr></tbody>
-    </table></div>
+    <div>
+      <div class="barra">
+        <span class="etiqueta-mono" id="total-registro">0 solicitudes</span>
+        <button id="limpiar-registro">Limpiar registro</button>
+      </div>
+      <div class="tabla desplazable"><table class="registro">
+        <thead><tr><th>Hora</th><th>Método</th><th>Destino</th><th>Código</th><th class="num">Tiempo</th></tr></thead>
+        <tbody id="registro"><tr><td colspan="5" class="vacio">Sin solicitudes todavía.</td></tr></tbody>
+      </table></div>
+    </div>
   </section>
 
   <footer>Interfaz web en el puerto 8080 · reenvía cada petición a pedidos (8000), usuarios (8001) y productos (8002).</footer>
@@ -279,8 +338,12 @@ async function llamar(servicio, ruta, opciones = {}, registrar = true) {
     datos = { error: "No se pudo conectar con la interfaz web (puerto 8080)." };
   }
   if (registrar) agregarRegistro(metodo, destino, codigo, ms);
-  return { codigo, datos, destino, origen, ms };
+  return { metodo, codigo, datos, destino, origen, ms };
 }
+
+/* 06. Registro de solicitudes */
+const MAXIMO_REGISTRO = 300;
+let totalRegistro = 0;
 
 function agregarRegistro(metodo, destino, codigo, ms) {
   const cuerpo = $("registro");
@@ -289,8 +352,18 @@ function agregarRegistro(metodo, destino, codigo, ms) {
   fila.innerHTML = `<td class="tenue">${hora()}</td><td>${metodo}</td><td>${escapar(destino)}</td>
     <td>${codigoHtml(codigo)}</td><td class="num">${ms} ms</td>`;
   cuerpo.prepend(fila);
-  while (cuerpo.rows.length > 40) cuerpo.deleteRow(-1);
+  while (cuerpo.rows.length > MAXIMO_REGISTRO) cuerpo.deleteRow(-1);
+  totalRegistro++;
+  $("total-registro").textContent = totalRegistro > MAXIMO_REGISTRO
+    ? `${totalRegistro} solicitudes · se muestran las últimas ${MAXIMO_REGISTRO}`
+    : `${totalRegistro} solicitud${totalRegistro === 1 ? "" : "es"}`;
 }
+
+$("limpiar-registro").addEventListener("click", () => {
+  totalRegistro = 0;
+  $("total-registro").textContent = "0 solicitudes";
+  $("registro").innerHTML = `<tr><td colspan="5" class="vacio">Sin solicitudes todavía.</td></tr>`;
+});
 
 /* 01. Estado de los servicios */
 function dibujarServicios() {
@@ -322,7 +395,10 @@ async function revisarSalud() {
   $("resumen").innerHTML = `<span class="punto ${clase}"></span>${activos}/${SERVICIOS.length} servicios en ejecución · ${hora()}`;
 }
 
-/* 04. Datos de cada servicio */
+/* 04 y 05. Datos de cada servicio */
+const seleccion = { usuarios: null, productos: null };
+const filaClase = (servicio, id) => `clic${seleccion[servicio] === id ? " seleccionado" : ""}`;
+
 async function cargarDatos() {
   const [usuarios, productos, pedidos] = await Promise.all([
     llamar("usuarios", "usuarios"), llamar("productos", "productos"), llamar("pedidos", "pedidos"),
@@ -330,13 +406,17 @@ async function cargarDatos() {
   const sinDatos = (columnas, r) => `<tr><td colspan="${columnas}" class="vacio">${escapar(r.datos?.error || "Sin datos")}</td></tr>`;
 
   if (usuarios.codigo === 200) {
-    $("usuarios").innerHTML = usuarios.datos.map((u) => `<tr><td class="mono">${u.id}</td><td>${escapar(u.nombre)}</td>
+    if (usuarios.datos.length === 0) $("usuarios").innerHTML = `<tr><td colspan="3" class="vacio">No hay usuarios.</td></tr>`;
+    else $("usuarios").innerHTML = usuarios.datos.map((u) => `<tr class="${filaClase("usuarios", u.id)}" data-id="${escapar(u.id)}">
+      <td class="mono">${escapar(u.id)}</td><td>${escapar(u.nombre)}</td>
       <td class="${u.estado === "activo" ? "" : "alerta"}">${escapar(u.estado)}</td></tr>`).join("");
     $("lista-usuarios").innerHTML = usuarios.datos.map((u) => `<option value="${u.id}">${escapar(u.nombre)}</option>`).join("");
   } else $("usuarios").innerHTML = sinDatos(3, usuarios);
 
   if (productos.codigo === 200) {
-    $("productos").innerHTML = productos.datos.map((p) => `<tr><td class="mono">${p.id}</td><td>${escapar(p.nombre)}</td>
+    if (productos.datos.length === 0) $("productos").innerHTML = `<tr><td colspan="4" class="vacio">No hay productos.</td></tr>`;
+    else $("productos").innerHTML = productos.datos.map((p) => `<tr class="${filaClase("productos", p.id)}" data-id="${escapar(p.id)}">
+      <td class="mono">${escapar(p.id)}</td><td>${escapar(p.nombre)}</td>
       <td class="num">${pesos.format(p.precio)}</td>
       <td class="num ${p.existencias > 0 ? "" : "alerta"}">${p.existencias > 0 ? p.existencias : "0 · agotado"}</td></tr>`).join("");
     $("lista-productos").innerHTML = productos.datos.map((p) => `<option value="${p.id}">${escapar(p.nombre)}</option>`).join("");
@@ -349,6 +429,86 @@ async function cargarDatos() {
     <td>${escapar(p.producto.nombre)} <span class="tenue">${p.producto.id}</span></td>
     <td class="num">${p.cantidad}</td><td class="num">${pesos.format(p.precio_unitario)}</td>
     <td class="num"><b>${pesos.format(p.total)}</b></td><td class="mono tenue">${p.fecha_utc.replace("T", " ").slice(0, 19)}</td></tr>`).join("");
+}
+
+/* 04. Gestión (CRUD): un formulario por servicio, con data-servicio="usuarios" o "productos" */
+// Solo envía los campos con valor: al modificar (PUT) se cambian únicamente esos.
+function leerFormulario(form) {
+  const datos = {};
+  for (const campo of form.querySelectorAll("[name]")) {
+    if (campo.name === "id" || campo.value.trim() === "") continue;
+    datos[campo.name] = campo.type === "number" ? Number(campo.value) : campo.value.trim();
+  }
+  return datos;
+}
+
+function llenarFormulario(form, datos) {
+  for (const campo of form.querySelectorAll("[name]")) {
+    if (datos[campo.name] !== undefined) campo.value = datos[campo.name];
+  }
+}
+
+function mostrarResultadoCrud(servicio, r, aviso) {
+  const caja = $(`resultado-${servicio}`);
+  if (!r) { caja.innerHTML = aviso ? `<span class="alerta">${escapar(aviso)}</span>` : ""; return; }
+  const detalle = r.datos?.error || r.datos?.mensaje || JSON.stringify(r.datos);
+  caja.innerHTML = `${codigoHtml(r.codigo)}<span>${r.metodo} ${escapar(r.destino)}</span>
+    <span class="detalle ${r.datos?.error ? "alerta" : ""}">${escapar(detalle)}</span>`;
+}
+
+async function accionCrud(form, accion) {
+  const servicio = form.dataset.servicio;
+  const id = form.querySelector("[name=id]").value.trim();
+  const ruta = `${servicio}/${encodeURIComponent(id)}`;
+  const conCuerpo = (method) => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(leerFormulario(form)) });
+
+  if (accion === "limpiar") {
+    form.reset();
+    seleccion[servicio] = null;
+    mostrarResultadoCrud(servicio, null);
+    return cargarDatos();
+  }
+  if (accion !== "crear" && !id) {
+    return mostrarResultadoCrud(servicio, null, "Escriba un ID o haga clic en una fila de la tabla.");
+  }
+  if (accion === "eliminar" && !confirm(`¿Eliminar ${id} del servicio de ${servicio}?`)) return;
+
+  const botones = form.querySelectorAll("button");
+  botones.forEach((b) => (b.disabled = true));
+  let r;
+  if (accion === "crear") r = await llamar(servicio, servicio, conCuerpo("POST"));
+  else if (accion === "consultar") r = await llamar(servicio, ruta);
+  else if (accion === "modificar") r = await llamar(servicio, ruta, conCuerpo("PUT"));
+  else r = await llamar(servicio, ruta, { method: "DELETE" });
+  botones.forEach((b) => (b.disabled = false));
+
+  mostrarResultadoCrud(servicio, r);
+  if (r.codigo < 300 && accion !== "eliminar") {
+    llenarFormulario(form, r.datos);  // al crear, muestra el ID que asignó el servicio
+    seleccion[servicio] = r.datos.id;
+  } else if (accion === "eliminar" && r.codigo < 300) {
+    form.reset();
+    seleccion[servicio] = null;
+  }
+  cargarDatos();
+}
+
+for (const form of document.querySelectorAll(".crud")) {
+  form.addEventListener("submit", (evento) => {
+    evento.preventDefault();
+    accionCrud(form, evento.submitter?.dataset.accion || "crear");
+  });
+  form.querySelector(".acciones").addEventListener("click", (evento) => {
+    const boton = evento.target.closest("button[type=button]");
+    if (boton) accionCrud(form, boton.dataset.accion);
+  });
+  // Clic en una fila de la tabla: consulta ese registro y lo carga en el formulario.
+  $(form.dataset.servicio).addEventListener("click", (evento) => {
+    const fila = evento.target.closest("tr[data-id]");
+    if (!fila) return;
+    form.querySelector("[name=id]").value = fila.dataset.id;
+    accionCrud(form, "consultar");
+  });
 }
 
 /* 02. Crear pedido */

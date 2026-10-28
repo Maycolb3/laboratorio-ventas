@@ -33,7 +33,7 @@ def configuracion():
     return jsonify(SERVICIOS)
 
 
-@app.route("/api/<servicio>/<path:ruta>", methods=["GET", "POST"])
+@app.route("/api/<servicio>/<path:ruta>", methods=["GET", "POST", "PUT", "DELETE"])
 def reenviar(servicio, ruta):
     base = SERVICIOS.get(servicio)
     if base is None:

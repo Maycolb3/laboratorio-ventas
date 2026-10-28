@@ -58,8 +58,8 @@ flowchart LR
 
 | Servicio  | Contenedor           | Puerto | Endpoints                                                  |
 |-----------|----------------------|--------|------------------------------------------------------------|
-| usuarios  | servicio-usuarios    | 8001   | `GET /salud`, `GET /usuarios`, `GET /usuarios/<id>`        |
-| productos | servicio-productos   | 8002   | `GET /salud`, `GET /productos`, `GET /productos/<id>`      |
+| usuarios  | servicio-usuarios    | 8001   | `GET /salud`, `GET /usuarios`, `GET /usuarios/<id>`, `POST /usuarios`, `PUT /usuarios/<id>`, `DELETE /usuarios/<id>` |
+| productos | servicio-productos   | 8002   | `GET /salud`, `GET /productos`, `GET /productos/<id>`, `POST /productos`, `PUT /productos/<id>`, `DELETE /productos/<id>` |
 | pedidos   | servicio-pedidos     | 8000   | `GET /salud`, `GET /pedidos`, `POST /pedidos`              |
 | interfaz  | servicio-interfaz    | 8080   | `GET /` (página web), `/api/<servicio>/<ruta>` (reenvío)   |
 
@@ -176,8 +176,9 @@ Abrir en el navegador **http://localhost:8080**. La página muestra:
 1. **Estado de los servicios**: consulta `/salud` de pedidos, usuarios y productos cada 3 segundos y muestra la dirección, el ID de contenedor (distinto en cada uno) y el tiempo de respuesta. Si se detiene un servicio (`docker compose stop productos`), su tarjeta se pone en rojo y las demás siguen en verde.
 2. **Crear un pedido**: formulario que envía `POST /pedidos` y muestra el código HTTP, el JSON de respuesta y el recorrido de la solicitud (validación → usuarios → productos → pedido creado), marcando en qué paso se detuvo.
 3. **Pruebas del laboratorio**: los casos de los pasos 4 a 6 y las validaciones adicionales. El botón **Ejecutar todas** los corre en orden y compara el código obtenido con el esperado.
-4. **Datos**: tablas de usuarios, productos y pedidos en memoria.
-5. **Registro de solicitudes**: cada petición hecha desde la página, con la dirección real del servicio que la atendió.
+4. **Gestión de usuarios y productos**: crear (`POST`), consultar (`GET`), modificar (`PUT`) y eliminar (`DELETE`). El ID lo asigna el servicio (U04, P04…); al modificar solo se envían los campos con valor. Los cambios viven en memoria.
+5. **Pedidos registrados**: tabla de los pedidos en memoria.
+6. **Registro de solicitudes**: cada petición hecha desde la página, con la dirección real del servicio que la atendió. Tiene su propio desplazamiento y guarda las últimas 300.
 
 El navegador no llama directamente a los servicios: la interfaz reenvía cada petición (`/api/pedidos/pedidos` → `http://pedidos:8000/pedidos`). Es un cliente más, como PowerShell o Postman; la comunicación entre pedidos, usuarios y productos sigue siendo la misma. La evidencia directa de esa comunicación sigue estando en `docker compose logs pedidos`.
 
