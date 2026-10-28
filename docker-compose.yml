@@ -32,6 +32,20 @@ services:
     networks:
       - red_ventas
 
+  interfaz:
+    build: ./interfaz
+    container_name: servicio-interfaz
+    ports:
+      - "8080:8080"   # abrir http://localhost:8080 en el navegador
+    environment:
+      USUARIOS_URL: http://usuarios:8001
+      PRODUCTOS_URL: http://productos:8002
+      PEDIDOS_URL: http://pedidos:8000
+    depends_on:
+      - pedidos
+    networks:
+      - red_ventas
+
 networks:
   red_ventas:
     name: red_ventas

@@ -1,6 +1,6 @@
 # Laboratorio: sistema de ventas distribuido con Docker
 
-Tres servicios Flask independientes (usuarios, productos y pedidos), cada uno en su propio contenedor, conectados por una red interna de Docker y comunicados mediante HTTP y JSON.
+Tres servicios Flask independientes (usuarios, productos y pedidos), cada uno en su propio contenedor, conectados por una red interna de Docker y comunicados mediante HTTP y JSON. Una interfaz web (puerto 8080) permite ver el estado de los servicios, sus datos y ejecutar las pruebas desde el navegador.
 
 ## Trabajo en equipo con Git
 
@@ -42,7 +42,12 @@ Después de cada `git pull` que traiga cambios en el código, reconstruir los co
 ```mermaid
 flowchart LR
     C["Cliente de pruebas<br/>PowerShell / Postman / curl"] -- "POST /pedidos<br/>localhost:8000" --> PED
+    N["Navegador"] -- "localhost:8080" --> INT
     subgraph RED["Red Docker: red_ventas"]
+        INT["servicio-interfaz<br/>:8080"]
+        INT -- "/salud, consultas<br/>y POST /pedidos" --> PED
+        INT -.-> USU
+        INT -.-> PRO
         PED["servicio-pedidos<br/>:8000"]
         USU["servicio-usuarios<br/>:8001"]
         PRO["servicio-productos<br/>:8002"]
@@ -56,6 +61,7 @@ flowchart LR
 | usuarios  | servicio-usuarios    | 8001   | `GET /salud`, `GET /usuarios`, `GET /usuarios/<id>`        |
 | productos | servicio-productos   | 8002   | `GET /salud`, `GET /productos`, `GET /productos/<id>`      |
 | pedidos   | servicio-pedidos     | 8000   | `GET /salud`, `GET /pedidos`, `POST /pedidos`              |
+| interfaz  | servicio-interfaz    | 8080   | `GET /` (página web), `/api/<servicio>/<ruta>` (reenvío)   |
 
 Datos de prueba:
 
@@ -78,10 +84,16 @@ laboratorio-ventas/
 │   ├── app.py
 │   ├── Dockerfile
 │   └── requirements.txt
-└── pedidos/
+├── pedidos/
+│   ├── app.py
+│   ├── Dockerfile
+│   └── requirements.txt
+└── interfaz/
     ├── app.py
     ├── Dockerfile
-    └── requirements.txt
+    ├── requirements.txt
+    └── static/
+        └── index.html
 ```
 
 Cada servicio tiene su propio `requirements.txt` porque cada imagen se construye por separado y solo debe incluir lo que necesita: usuarios y productos solo usan Flask; pedidos usa además `requests` para llamar a los otros servicios.
@@ -90,7 +102,7 @@ Cada servicio tiene su propio `requirements.txt` porque cada imagen se construye
 
 - Docker Desktop instalado y **abierto** (el ícono de la ballena debe indicar que está en ejecución).
 - Windows 10/11 con PowerShell, o macOS (Intel o Apple Silicon) con Terminal.
-- Puertos 8000, 8001 y 8002 libres.
+- Puertos 8000, 8001, 8002 y 8080 libres.
 
 Comprobar Docker:
 
@@ -129,6 +141,7 @@ Resultado esperado al final:
 ✔ Container servicio-usuarios   Started
 ✔ Container servicio-productos  Started
 ✔ Container servicio-pedidos    Started
+✔ Container servicio-interfaz   Started
 ```
 
 ## Paso 3. Comprobar que los tres servicios están en ejecución
@@ -137,7 +150,7 @@ Resultado esperado al final:
 docker compose ps
 ```
 
-Resultado esperado: tres filas (`servicio-usuarios`, `servicio-productos`, `servicio-pedidos`) con estado `Up` o `running` y los puertos `0.0.0.0:8001->8001/tcp`, `0.0.0.0:8002->8002/tcp` y `0.0.0.0:8000->8000/tcp`.
+Resultado esperado: cuatro filas (`servicio-usuarios`, `servicio-productos`, `servicio-pedidos`, `servicio-interfaz`) con estado `Up` o `running` y los puertos `0.0.0.0:8001->8001/tcp`, `0.0.0.0:8002->8002/tcp`, `0.0.0.0:8000->8000/tcp` y `0.0.0.0:8080->8080/tcp`.
 
 Consultar la ruta de salud de cada uno:
 
@@ -155,6 +168,18 @@ También se pueden consultar los datos:
 Invoke-RestMethod http://localhost:8001/usuarios
 Invoke-RestMethod http://localhost:8002/productos
 ```
+
+## Interfaz web
+
+Abrir en el navegador **http://localhost:8080**. La página muestra:
+
+1. **Estado de los servicios**: consulta `/salud` de pedidos, usuarios y productos cada 3 segundos y muestra la dirección, el ID de contenedor (distinto en cada uno) y el tiempo de respuesta. Si se detiene un servicio (`docker compose stop productos`), su tarjeta se pone en rojo y las demás siguen en verde.
+2. **Crear un pedido**: formulario que envía `POST /pedidos` y muestra el código HTTP, el JSON de respuesta y el recorrido de la solicitud (validación → usuarios → productos → pedido creado), marcando en qué paso se detuvo.
+3. **Pruebas del laboratorio**: los casos de los pasos 4 a 6 y las validaciones adicionales. El botón **Ejecutar todas** los corre en orden y compara el código obtenido con el esperado.
+4. **Datos**: tablas de usuarios, productos y pedidos en memoria.
+5. **Registro de solicitudes**: cada petición hecha desde la página, con la dirección real del servicio que la atendió.
+
+El navegador no llama directamente a los servicios: la interfaz reenvía cada petición (`/api/pedidos/pedidos` → `http://pedidos:8000/pedidos`). Es un cliente más, como PowerShell o Postman; la comunicación entre pedidos, usuarios y productos sigue siendo la misma. La evidencia directa de esa comunicación sigue estando en `docker compose logs pedidos`.
 
 ## Preparación de las pruebas de compra (PowerShell)
 
@@ -383,12 +408,12 @@ Los pasos anteriores corren los tres contenedores en un mismo equipo. Para repar
 |---|---|---|---|
 | A | usuarios  | `docker-compose.computador-a.yml` | 8001 |
 | B | productos | `docker-compose.computador-b.yml` | 8002 |
-| C | pedidos   | `docker-compose.computador-c.yml` + `.env` | 8000 |
+| C | pedidos e interfaz web | `docker-compose.computador-c.yml` + `.env` | 8000 y 8080 |
 
 Resumen (la guía paso a paso completa está en el documento del grupo):
 
 1. Los tres equipos en la misma red (mismo Wi-Fi o Tailscale). Cada uno anota su IP con `ipconfig` (Windows) o `ipconfig getifaddr en0` (Mac).
-2. En Windows, abrir el puerto del servicio en PowerShell como administrador (8001 en A, 8002 en B, 8000 en C):
+2. En Windows, abrir el puerto del servicio en PowerShell como administrador (8001 en A, 8002 en B, 8000 y 8080 en C, con `-LocalPort 8000,8080`):
 
    ```powershell
    New-NetFirewallRule -DisplayName "Laboratorio ventas" -Direction Inbound -Protocol TCP -LocalPort 8001 -Action Allow -Profile Any
@@ -411,7 +436,7 @@ Resumen (la guía paso a paso completa está en el documento del grupo):
 
    `.env` está en `.gitignore` porque las IP cambian según el equipo y la red.
 
-5. Las pruebas se hacen desde cualquier equipo con la IP de C, por ejemplo `Invoke-RestMethod http://192.168.0.12:8000/salud`. En `Enviar-Pedido`, cambiar `localhost` por la IP de C.
+5. Las pruebas se hacen desde cualquier equipo con la IP de C, por ejemplo `Invoke-RestMethod http://192.168.0.12:8000/salud`. En `Enviar-Pedido`, cambiar `localhost` por la IP de C. La interfaz web se abre en `http://<IP-de-C>:8080` y en las tarjetas de estado se ven las IP de A y B.
 
 Resultado esperado: las compras funcionan igual que en un solo equipo, y en `docker compose -f docker-compose.computador-c.yml logs pedidos` las líneas `->` muestran las IP de A y B.
 
@@ -458,6 +483,6 @@ Postman muestra el código (201, 404, 409, 503) y el JSON de respuesta.
 | Síntoma | Causa probable | Solución |
 |---|---|---|
 | `error during connect` o `Cannot connect to the Docker daemon` | Docker Desktop cerrado | Abrir Docker Desktop y esperar a que inicie |
-| `port is already allocated` | Otro programa usa 8000, 8001 u 8002 | Cerrar ese programa o cambiar el puerto izquierdo en `ports` del compose |
+| `port is already allocated` | Otro programa usa 8000, 8001, 8002 u 8080 | Cerrar ese programa o cambiar el puerto izquierdo en `ports` del compose |
 | `No se puede conectar con el servidor remoto` en PowerShell | Contenedores detenidos | `docker compose ps` y luego `docker compose up -d` |
 | Los cambios en `app.py` no se reflejan | La imagen no se reconstruyó | `docker compose up -d --build` |

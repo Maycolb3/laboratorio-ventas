@@ -14,3 +14,16 @@ services:
       # la IP de cada equipo, que se lee del archivo .env. No se usa localhost.
       USUARIOS_URL: ${USUARIOS_URL:?Falta USUARIOS_URL en el archivo .env (IP del computador A)}
       PRODUCTOS_URL: ${PRODUCTOS_URL:?Falta PRODUCTOS_URL en el archivo .env (IP del computador B)}
+
+  # Interfaz web: se abre desde cualquier equipo en http://<IP-de-C>:8080
+  interfaz:
+    build: ./interfaz
+    container_name: servicio-interfaz
+    ports:
+      - "8080:8080"
+    environment:
+      USUARIOS_URL: ${USUARIOS_URL}
+      PRODUCTOS_URL: ${PRODUCTOS_URL}
+      PEDIDOS_URL: http://pedidos:8000   # mismo computador: se usa el nombre del servicio
+    depends_on:
+      - pedidos

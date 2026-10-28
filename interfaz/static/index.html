@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sistema de ventas</title>
+<style>
+  :root {
+    --fondo: #f7f7f5; --superficie: #ffffff; --tinta: #1a1a1a; --suave: #5c5c58; --tenue: #8f8f8a; --linea: #e2e2de;
+    --verde: #3f7a52; --ambar: #9a6a1c; --rojo: #b3412e;
+    --mono: ui-monospace, "Cascadia Mono", "Cascadia Code", Consolas, Menlo, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fondo: #121212; --superficie: #1a1a1a; --tinta: #ececea; --suave: #a3a39e; --tenue: #6f6f6a; --linea: #2a2a28;
+      --verde: #7fb38f; --ambar: #d0a35a; --rojo: #e0715f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--fondo); color: var(--tinta); font: 14px/1.55 var(--sans); }
+  code { font-family: var(--mono); font-size: 12.5px; }
+  .contenedor { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+  @media (max-width: 560px) { .contenedor { padding: 0 16px; } }
+
+  .etiqueta-mono { font: 11px/1.4 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--tenue); }
+
+  /* Cabecera */
+  .pagina { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; padding: 40px 0 28px; }
+  .pagina h1 { margin: 6px 0 0; font-size: 26px; font-weight: 600; letter-spacing: -.015em; }
+  .resumen { font: 12px var(--mono); color: var(--suave); display: flex; align-items: center; gap: 8px; }
+
+  /* Secciones: título a la izquierda, contenido a la derecha */
+  .seccion { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 40px; padding: 32px 0; border-top: 1px solid var(--linea); }
+  .seccion h2 { margin: 6px 0 8px; font-size: 15px; font-weight: 600; }
+  .seccion .cabeza p { margin: 0 0 10px; color: var(--suave); font-size: 13px; }
+  @media (max-width: 900px) { .seccion { grid-template-columns: 1fr; gap: 18px; } }
+  .columnas { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; }
+  @media (max-width: 1000px) { .columnas { grid-template-columns: 1fr; } }
+  .subtitulo { margin: 0 0 10px; }
+
+  /* Indicador de estado */
+  .punto { width: 7px; height: 7px; border-radius: 50%; background: var(--tenue); flex: none; display: inline-block; }
+  .arriba .punto, .punto.arriba { background: var(--verde); }
+  .abajo .punto, .punto.abajo { background: var(--rojo); }
+
+  /* Estado de los servicios */
+  .servicios { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--linea); background: var(--superficie); }
+  .servicio { padding: 16px 18px; border-left: 1px solid var(--linea); }
+  .servicio:first-child { border-left: 0; }
+  @media (max-width: 760px) {
+    .servicios { grid-template-columns: 1fr; }
+    .servicio { border-left: 0; border-top: 1px solid var(--linea); }
+    .servicio:first-child { border-top: 0; }
+  }
+  .servicio .nombre { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .servicio .nombre b { font-size: 15px; font-weight: 600; }
+  .servicio .estado { display: flex; align-items: center; gap: 7px; margin: 6px 0 12px; font-size: 13px; color: var(--suave); }
+  .servicio.abajo .estado { color: var(--rojo); }
+  dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 14px; font-size: 12px; }
+  dt { color: var(--tenue); }
+  dd { margin: 0; font-family: var(--mono); overflow-wrap: anywhere; }
+
+  /* Formulario */
+  form { display: grid; grid-template-columns: 1fr 1fr 96px; gap: 12px; align-items: end; }
+  @media (max-width: 560px) { form { grid-template-columns: 1fr; } }
+  label { display: grid; gap: 5px; }
+  input { font: 14px var(--mono); padding: 8px 10px; border: 1px solid var(--linea); border-radius: 3px;
+          background: var(--superficie); color: var(--tinta); width: 100%; }
+  input:focus { outline: none; border-color: var(--tinta); }
+  button { font: 13px var(--sans); padding: 8px 14px; border-radius: 3px; cursor: pointer;
+           border: 1px solid var(--linea); background: transparent; color: var(--tinta); }
+  button:hover { border-color: var(--tinta); }
+  button.primario { background: var(--tinta); border-color: var(--tinta); color: var(--fondo); font-weight: 500; }
+  button.primario:hover { opacity: .85; }
+  button:disabled { opacity: .5; cursor: wait; }
+  form button { grid-column: 1 / -1; justify-self: start; }
+
+  /* Recorrido de la solicitud */
+  .recorrido { list-style: none; margin: 26px 0 0; padding: 0; }
+  .recorrido li { position: relative; padding: 0 0 14px 24px; font-size: 13px; color: var(--suave); }
+  .recorrido li::before { content: ""; position: absolute; left: 2px; top: 6px; width: 7px; height: 7px; border-radius: 50%;
+                          border: 1px solid var(--tenue); background: var(--fondo); }
+  .recorrido li::after { content: ""; position: absolute; left: 5.5px; top: 16px; bottom: 0; width: 1px; background: var(--linea); }
+  .recorrido li:last-child::after { display: none; }
+  .recorrido b { display: block; color: var(--tinta); font-weight: 500; }
+  .recorrido li.ok::before { background: var(--tinta); border-color: var(--tinta); }
+  .recorrido li.fallo::before { background: var(--rojo); border-color: var(--rojo); }
+  .recorrido li.fallo, .recorrido li.fallo b { color: var(--rojo); }
+  .recorrido li.omitido { opacity: .4; }
+  .nota { margin: 4px 0 0; font-size: 12px; color: var(--tenue); }
+
+  /* Respuesta */
+  .linea-respuesta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-bottom: 10px; font: 12px var(--mono); color: var(--suave); }
+  .codigo { font-family: var(--mono); font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+  .codigo::before { content: ""; width: 6px; height: 6px; border-radius: 1px; background: currentColor; }
+  .c2 { color: var(--verde); } .c4 { color: var(--ambar); } .c5 { color: var(--rojo); }
+  pre { margin: 0; padding: 14px 16px; background: var(--superficie); border: 1px solid var(--linea); border-radius: 3px;
+        font: 12.5px/1.6 var(--mono); overflow-x: auto; max-height: 360px; }
+  .vacio { color: var(--tenue); font-size: 13px; padding: 18px 0; }
+
+  /* Tablas */
+  .tabla { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 0 10px 8px 0; border-bottom: 1px solid var(--tinta);
+       font: 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--tenue); font-weight: 400; white-space: nowrap; }
+  td { padding: 9px 10px 9px 0; border-bottom: 1px solid var(--linea); white-space: nowrap; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.mono, .registro td { font-family: var(--mono); font-size: 12px; }
+  .alerta { color: var(--rojo); }
+  .tenue { color: var(--tenue); }
+  tr.clic { cursor: pointer; }
+  tr.clic:hover td { background: var(--superficie); }
+  .barra { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .bloque + .bloque { margin-top: 32px; }
+
+  footer { border-top: 1px solid var(--linea); padding: 20px 0 40px; font-size: 12px; color: var(--tenue); }
+</style>
+</head>
+<body>
+<div class="contenedor">
+  <header class="pagina">
+    <div>
+      <div class="etiqueta-mono">Laboratorio · Docker · HTTP/JSON</div>
+      <h1>Sistema de ventas distribuido</h1>
+    </div>
+    <div class="resumen" id="resumen"><span class="punto"></span>comprobando servicios…</div>
+  </header>
+
+  <section class="seccion">
+    <div class="cabeza">
+      <div class="etiqueta-mono">01</div>
+      <h2>Estado de los servicios</h2>
+      <p>Consulta <code>GET /salud</code> cada 3 segundos. Cada servicio responde desde un contenedor distinto.</p>
+      <p>Detenga uno con <code>docker compose stop productos</code>: los demás siguen respondiendo.</p>
+    </div>
+    <div class="servicios" id="servicios"></div>
+  </section>
+
+  <section class="seccion">
+    <div class="cabeza">
+      <div class="etiqueta-mono">02</div>
+      <h2>Crear un pedido</h2>
+      <p>Envía <code>POST /pedidos</code>. Pedidos consulta a usuarios y a productos antes de aceptar la compra.</p>
+      <p>Puede escribir IDs que no existen para probar los errores.</p>
+    </div>
+    <div class="columnas">
+      <div>
+        <form id="formulario">
+          <label><span class="etiqueta-mono">Usuario</span><input id="usuario" list="lista-usuarios" value="U01" autocomplete="off"></label>
+          <label><span class="etiqueta-mono">Producto</span><input id="producto" list="lista-productos" value="P01" autocomplete="off"></label>
+          <label><span class="etiqueta-mono">Cantidad</span><input id="cantidad" type="number" value="2"></label>
+          <button class="primario" type="submit">Enviar pedido</button>
+        </form>
+        <datalist id="lista-usuarios"></datalist>
+        <datalist id="lista-productos"></datalist>
+        <ol class="recorrido" id="recorrido"></ol>
+        <p class="nota">Recorrido deducido de la respuesta. La evidencia directa está en <code>docker compose logs pedidos</code>.</p>
+      </div>
+      <div>
+        <div class="etiqueta-mono subtitulo">Respuesta</div>
+        <div id="respuesta"><div class="vacio">Aún no se ha enviado ninguna solicitud.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="seccion">
+    <div class="cabeza">
+      <div class="etiqueta-mono">03</div>
+      <h2>Pruebas del laboratorio</h2>
+      <p>Casos de los pasos 4 a 6 de la guía y las validaciones adicionales.</p>
+      <p>Haga clic en una fila para ejecutar solo ese caso.</p>
+    </div>
+    <div>
+      <div class="barra">
+        <span class="etiqueta-mono" id="resultado-pruebas">Sin ejecutar</span>
+        <button class="primario" id="ejecutar-todas">Ejecutar todas</button>
+      </div>
+      <div class="tabla">
+        <table>
+          <thead><tr><th>Caso</th><th>Usuario</th><th>Producto</th><th class="num">Cant.</th><th>Esperado</th><th>Obtenido</th><th>Mensaje</th></tr></thead>
+          <tbody id="pruebas"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="seccion">
+    <div class="cabeza">
+      <div class="etiqueta-mono">04</div>
+      <h2>Datos de cada servicio</h2>
+      <p>Usuarios y productos son datos fijos. Los pedidos viven en memoria y se pierden al detener el contenedor.</p>
+      <button id="recargar">Recargar datos</button>
+    </div>
+    <div>
+      <div class="columnas bloque">
+        <div>
+          <div class="etiqueta-mono subtitulo">Usuarios</div>
+          <div class="tabla"><table>
+            <thead><tr><th>ID</th><th>Nombre</th><th>Estado</th></tr></thead>
+            <tbody id="usuarios"></tbody>
+          </table></div>
+        </div>
+        <div>
+          <div class="etiqueta-mono subtitulo">Productos</div>
+          <div class="tabla"><table>
+            <thead><tr><th>ID</th><th>Nombre</th><th class="num">Precio</th><th class="num">Existencias</th></tr></thead>
+            <tbody id="productos"></tbody>
+          </table></div>
+        </div>
+      </div>
+      <div class="bloque">
+        <div class="etiqueta-mono subtitulo">Pedidos</div>
+        <div class="tabla"><table>
+          <thead><tr><th>ID</th><th>Usuario</th><th>Producto</th><th class="num">Cant.</th><th class="num">Precio unit.</th><th class="num">Total</th><th>Fecha UTC</th></tr></thead>
+          <tbody id="pedidos"></tbody>
+        </table></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="seccion">
+    <div class="cabeza">
+      <div class="etiqueta-mono">05</div>
+      <h2>Registro de solicitudes</h2>
+      <p>Cada petición que hizo esta página, con la dirección real del servicio que la atendió: nombre de contenedor o IP del computador.</p>
+    </div>
+    <div class="tabla"><table class="registro">
+      <thead><tr><th>Hora</th><th>Método</th><th>Destino</th><th>Código</th><th class="num">Tiempo</th></tr></thead>
+      <tbody id="registro"><tr><td colspan="5" class="vacio">Sin solicitudes todavía.</td></tr></tbody>
+    </table></div>
+  </section>
+
+  <footer>Interfaz web en el puerto 8080 · reenvía cada petición a pedidos (8000), usuarios (8001) y productos (8002).</footer>
+</div>
+
+<script>
+const SERVICIOS = [
+  { id: "pedidos", nombre: "Pedidos", puerto: 8000 },
+  { id: "usuarios", nombre: "Usuarios", puerto: 8001 },
+  { id: "productos", nombre: "Productos", puerto: 8002 },
+];
+const PRUEBAS = [
+  { caso: "Compra válida", usuario: "U01", producto: "P01", cantidad: 2, esperado: 201 },
+  { caso: "Usuario inexistente", usuario: "U99", producto: "P01", cantidad: 1, esperado: 404 },
+  { caso: "Cantidad mayor a las existencias", usuario: "U01", producto: "P01", cantidad: 50, esperado: 409 },
+  { caso: "Cantidad cero", usuario: "U01", producto: "P01", cantidad: 0, esperado: 400 },
+  { caso: "Usuario inactivo", usuario: "U03", producto: "P01", cantidad: 1, esperado: 409 },
+  { caso: "Producto inexistente", usuario: "U01", producto: "P99", cantidad: 1, esperado: 404 },
+  { caso: "Producto agotado", usuario: "U01", producto: "P03", cantidad: 1, esperado: 409 },
+];
+const PASOS = [
+  ["Servicio de pedidos", "Recibe la solicitud POST /pedidos"],
+  ["Validación de datos", "usuario_id, producto_id y cantidad entera mayor que cero"],
+  ["Servicio de usuarios", "GET /usuarios/{id}: debe existir y estar activo"],
+  ["Servicio de productos", "GET /productos/{id}: debe existir y tener existencias"],
+  ["Pedido creado", "Se calcula el total y se guarda en memoria"],
+];
+
+const $ = (id) => document.getElementById(id);
+const pesos = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
+const escapar = (texto) => String(texto ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const codigoHtml = (codigo) => `<span class="codigo c${String(codigo || 5)[0]}">${codigo || "sin respuesta"}</span>`;
+const hora = () => new Date().toLocaleTimeString("es-CO", { hour12: false });
+let configuracion = {};
+
+async function llamar(servicio, ruta, opciones = {}, registrar = true) {
+  const metodo = opciones.method || "GET";
+  let codigo = 0, datos = null, destino = `${configuracion[servicio] || servicio}/${ruta}`, origen = "interfaz", ms = 0;
+  const inicio = performance.now();
+  try {
+    const respuesta = await fetch(`/api/${servicio}/${ruta}`, opciones);
+    codigo = respuesta.status;
+    destino = respuesta.headers.get("X-Destino") || destino;
+    origen = respuesta.headers.get("X-Origen") || origen;
+    ms = Number(respuesta.headers.get("X-Duracion-ms")) || Math.round(performance.now() - inicio);
+    datos = await respuesta.json().catch(() => null);
+  } catch {
+    datos = { error: "No se pudo conectar con la interfaz web (puerto 8080)." };
+  }
+  if (registrar) agregarRegistro(metodo, destino, codigo, ms);
+  return { codigo, datos, destino, origen, ms };
+}
+
+function agregarRegistro(metodo, destino, codigo, ms) {
+  const cuerpo = $("registro");
+  if (cuerpo.querySelector(".vacio")) cuerpo.innerHTML = "";
+  const fila = document.createElement("tr");
+  fila.innerHTML = `<td class="tenue">${hora()}</td><td>${metodo}</td><td>${escapar(destino)}</td>
+    <td>${codigoHtml(codigo)}</td><td class="num">${ms} ms</td>`;
+  cuerpo.prepend(fila);
+  while (cuerpo.rows.length > 40) cuerpo.deleteRow(-1);
+}
+
+/* 01. Estado de los servicios */
+function dibujarServicios() {
+  $("servicios").innerHTML = SERVICIOS.map((s) => `
+    <div class="servicio" id="srv-${s.id}">
+      <div class="nombre"><b>${s.nombre}</b><span class="etiqueta-mono">:${s.puerto}</span></div>
+      <div class="estado"><span class="punto"></span><span class="texto">comprobando…</span></div>
+      <dl>
+        <dt>Dirección</dt><dd>${escapar(configuracion[s.id] || "")}</dd>
+        <dt>Contenedor</dt><dd class="id-contenedor">—</dd>
+        <dt>Respuesta</dt><dd class="tiempo">—</dd>
+      </dl>
+    </div>`).join("");
+}
+
+async function revisarSalud() {
+  const resultados = await Promise.all(SERVICIOS.map(async (s) => {
+    const r = await llamar(s.id, "salud", {}, false);
+    const tarjeta = $(`srv-${s.id}`);
+    const arriba = r.codigo === 200 && r.origen === s.id;
+    tarjeta.className = "servicio " + (arriba ? "arriba" : "abajo");
+    tarjeta.querySelector(".texto").textContent = arriba ? "En ejecución" : (r.datos?.error || "Sin respuesta");
+    tarjeta.querySelector(".id-contenedor").textContent = arriba ? r.datos.contenedor : "—";
+    tarjeta.querySelector(".tiempo").textContent = arriba ? `${r.ms} ms` : "—";
+    return arriba;
+  }));
+  const activos = resultados.filter(Boolean).length;
+  const clase = activos === SERVICIOS.length ? "arriba" : "abajo";
+  $("resumen").innerHTML = `<span class="punto ${clase}"></span>${activos}/${SERVICIOS.length} servicios en ejecución · ${hora()}`;
+}
+
+/* 04. Datos de cada servicio */
+async function cargarDatos() {
+  const [usuarios, productos, pedidos] = await Promise.all([
+    llamar("usuarios", "usuarios"), llamar("productos", "productos"), llamar("pedidos", "pedidos"),
+  ]);
+  const sinDatos = (columnas, r) => `<tr><td colspan="${columnas}" class="vacio">${escapar(r.datos?.error || "Sin datos")}</td></tr>`;
+
+  if (usuarios.codigo === 200) {
+    $("usuarios").innerHTML = usuarios.datos.map((u) => `<tr><td class="mono">${u.id}</td><td>${escapar(u.nombre)}</td>
+      <td class="${u.estado === "activo" ? "" : "alerta"}">${escapar(u.estado)}</td></tr>`).join("");
+    $("lista-usuarios").innerHTML = usuarios.datos.map((u) => `<option value="${u.id}">${escapar(u.nombre)}</option>`).join("");
+  } else $("usuarios").innerHTML = sinDatos(3, usuarios);
+
+  if (productos.codigo === 200) {
+    $("productos").innerHTML = productos.datos.map((p) => `<tr><td class="mono">${p.id}</td><td>${escapar(p.nombre)}</td>
+      <td class="num">${pesos.format(p.precio)}</td>
+      <td class="num ${p.existencias > 0 ? "" : "alerta"}">${p.existencias > 0 ? p.existencias : "0 · agotado"}</td></tr>`).join("");
+    $("lista-productos").innerHTML = productos.datos.map((p) => `<option value="${p.id}">${escapar(p.nombre)}</option>`).join("");
+  } else $("productos").innerHTML = sinDatos(4, productos);
+
+  if (pedidos.codigo !== 200) $("pedidos").innerHTML = sinDatos(7, pedidos);
+  else if (pedidos.datos.length === 0) $("pedidos").innerHTML = `<tr><td colspan="7" class="vacio">No hay pedidos en memoria.</td></tr>`;
+  else $("pedidos").innerHTML = pedidos.datos.slice().reverse().map((p) => `<tr><td class="mono">${p.id}</td>
+    <td>${escapar(p.usuario.nombre)} <span class="tenue">${p.usuario.id}</span></td>
+    <td>${escapar(p.producto.nombre)} <span class="tenue">${p.producto.id}</span></td>
+    <td class="num">${p.cantidad}</td><td class="num">${pesos.format(p.precio_unitario)}</td>
+    <td class="num"><b>${pesos.format(p.total)}</b></td><td class="mono tenue">${p.fecha_utc.replace("T", " ").slice(0, 19)}</td></tr>`).join("");
+}
+
+/* 02. Crear pedido */
+async function enviarPedido(usuario, producto, cantidad) {
+  const cuerpo = JSON.stringify({ usuario_id: usuario, producto_id: producto, cantidad });
+  const r = await llamar("pedidos", "pedidos", { method: "POST", headers: { "Content-Type": "application/json" }, body: cuerpo });
+  mostrarRespuesta(r, cuerpo);
+  mostrarRecorrido(r);
+  return r;
+}
+
+function mostrarRespuesta(r, cuerpo) {
+  $("respuesta").innerHTML = `
+    <div class="linea-respuesta">${codigoHtml(r.codigo)}<span>POST ${escapar(r.destino)}</span><span>${r.ms} ms</span></div>
+    <pre>${escapar(JSON.stringify(r.datos, null, 2))}</pre>
+    <div class="etiqueta-mono subtitulo" style="margin-top:20px">Cuerpo enviado</div>
+    <pre>${escapar(cuerpo)}</pre>`;
+}
+
+// Deduce hasta qué paso llegó la solicitud a partir del código y el mensaje.
+// Sin respuesta (r omitido) se muestran todos los pasos como pendientes.
+function mostrarRecorrido(r) {
+  const error = r?.datos?.error || "";
+  let fallo = null;
+  if (r?.codigo === 201) fallo = -1;
+  else if (r?.origen === "interfaz") fallo = 0;
+  else if (r?.codigo === 400) fallo = 1;
+  else if (r && /servicio de usuarios|usuario/i.test(error)) fallo = 2;
+  else if (r) fallo = 3;
+  $("recorrido").innerHTML = PASOS.map(([titulo, detalle], i) => {
+    let estado = "";
+    if (fallo !== null) estado = fallo === -1 || i < fallo ? "ok" : i === fallo ? "fallo" : "omitido";
+    const texto = estado === "fallo" ? escapar(error) : detalle;
+    return `<li class="${estado}"><b>${titulo}</b>${texto}</li>`;
+  }).join("");
+}
+
+$("formulario").addEventListener("submit", async (evento) => {
+  evento.preventDefault();
+  const boton = evento.submitter;
+  boton.disabled = true;
+  const cantidad = $("cantidad").value === "" ? null : Number($("cantidad").value);
+  await enviarPedido($("usuario").value.trim(), $("producto").value.trim(), cantidad);
+  boton.disabled = false;
+  cargarDatos();
+});
+
+/* 03. Pruebas del laboratorio */
+function dibujarPruebas() {
+  $("pruebas").innerHTML = PRUEBAS.map((p, i) => `<tr class="clic" data-i="${i}" title="Ejecutar este caso">
+    <td>${p.caso}</td><td class="mono">${p.usuario}</td><td class="mono">${p.producto}</td><td class="num">${p.cantidad}</td>
+    <td>${codigoHtml(p.esperado)}</td><td class="obtenido tenue">—</td><td class="mensaje tenue"></td></tr>`).join("");
+}
+
+const resultados = [];
+
+async function ejecutarPrueba(i) {
+  const p = PRUEBAS[i];
+  const fila = $("pruebas").rows[i];
+  $("usuario").value = p.usuario; $("producto").value = p.producto; $("cantidad").value = p.cantidad;
+  const r = await enviarPedido(p.usuario, p.producto, p.cantidad);
+  resultados[i] = r.codigo === p.esperado;
+  fila.querySelector(".obtenido").innerHTML = codigoHtml(r.codigo) +
+    (resultados[i] ? ` <span class="tenue">✓</span>` : ` <span class="alerta">✕ distinto</span>`);
+  fila.querySelector(".mensaje").textContent = r.datos?.error || r.datos?.mensaje || "";
+  const ejecutadas = resultados.filter((x) => x !== undefined);
+  $("resultado-pruebas").textContent = `${ejecutadas.filter(Boolean).length} de ${ejecutadas.length} coinciden con lo esperado`;
+}
+
+$("pruebas").addEventListener("click", async (evento) => {
+  const fila = evento.target.closest("tr");
+  if (!fila) return;
+  await ejecutarPrueba(Number(fila.dataset.i));
+  cargarDatos();
+});
+
+$("ejecutar-todas").addEventListener("click", async (evento) => {
+  evento.target.disabled = true;
+  for (let i = 0; i < PRUEBAS.length; i++) await ejecutarPrueba(i);
+  evento.target.disabled = false;
+  cargarDatos();
+});
+
+$("recargar").addEventListener("click", cargarDatos);
+
+(async function iniciar() {
+  try { configuracion = await (await fetch("/api/configuracion")).json(); } catch { configuracion = {}; }
+  dibujarServicios();
+  dibujarPruebas();
+  mostrarRecorrido();
+  revisarSalud();
+  cargarDatos();
+  setInterval(revisarSalud, 3000);
+})();
+</script>
+</body>
+</html>
