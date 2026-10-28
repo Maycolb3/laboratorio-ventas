@@ -3,8 +3,12 @@
 Expone por HTTP la gestión de usuarios de prueba: consultar, crear, modificar
 y eliminar. Los datos viven en memoria: se reinician cada vez que el
 contenedor arranca.
+
+Flask atiende cada petición en un hilo distinto: las modificaciones y el
+contador de IDs se protegen con un semáforo binario (mutex).
 """
 import socket
+import threading
 
 from flask import Flask, jsonify, request
 
@@ -17,6 +21,9 @@ USUARIOS = {
 }
 ESTADOS = ("activo", "inactivo")
 siguiente_numero = len(USUARIOS) + 1  # los IDs nuevos siguen U04, U05...
+
+# Semáforo binario: solo un hilo a la vez modifica los usuarios.
+semaforo = threading.Lock()
 
 
 def leer_json():
@@ -50,16 +57,21 @@ def salud():
 
 @app.get("/usuarios")
 def listar_usuarios():
-    return jsonify(list(USUARIOS.values()))
+    # Se copia dentro del semáforo para no recorrer el diccionario mientras otro hilo lo cambia.
+    with semaforo:
+        copia = [dict(usuario) for usuario in USUARIOS.values()]
+    return jsonify(copia)
 
 
 @app.get("/usuarios/<usuario_id>")
 def obtener_usuario(usuario_id):
     print(f"[usuarios] Consulta del usuario {usuario_id} desde {request.remote_addr}")
-    usuario = USUARIOS.get(usuario_id)
-    if usuario is None:
+    with semaforo:
+        usuario = USUARIOS.get(usuario_id)
+        copia = dict(usuario) if usuario else None
+    if copia is None:
         return jsonify({"error": f"El usuario {usuario_id} no existe"}), 404
-    return jsonify(usuario)
+    return jsonify(copia)
 
 
 @app.post("/usuarios")
@@ -71,35 +83,40 @@ def crear_usuario():
     if error:
         return jsonify({"error": error}), 400
 
-    usuario_id = f"U{siguiente_numero:02d}"
-    siguiente_numero += 1
-    usuario = {"id": usuario_id, "nombre": datos["nombre"].strip(), "estado": datos["estado"]}
-    USUARIOS[usuario_id] = usuario
+    with semaforo:  # el contador de IDs también es una sección crítica
+        usuario_id = f"U{siguiente_numero:02d}"
+        siguiente_numero += 1
+        usuario = {"id": usuario_id, "nombre": datos["nombre"].strip(), "estado": datos["estado"]}
+        USUARIOS[usuario_id] = usuario
+        copia = dict(usuario)
     print(f"[usuarios] Usuario {usuario_id} creado desde {request.remote_addr}")
-    return jsonify(usuario), 201
+    return jsonify(copia), 201
 
 
 @app.put("/usuarios/<usuario_id>")
 def modificar_usuario(usuario_id):
-    usuario = USUARIOS.get(usuario_id)
-    if usuario is None:
-        return jsonify({"error": f"El usuario {usuario_id} no existe"}), 404
     datos = leer_json()
     error = validar(datos, parcial=True)
     if error:
         return jsonify({"error": error}), 400
 
-    if "nombre" in datos:
-        usuario["nombre"] = datos["nombre"].strip()
-    if "estado" in datos:
-        usuario["estado"] = datos["estado"]
+    with semaforo:
+        usuario = USUARIOS.get(usuario_id)
+        if usuario is None:
+            return jsonify({"error": f"El usuario {usuario_id} no existe"}), 404
+        if "nombre" in datos:
+            usuario["nombre"] = datos["nombre"].strip()
+        if "estado" in datos:
+            usuario["estado"] = datos["estado"]
+        copia = dict(usuario)
     print(f"[usuarios] Usuario {usuario_id} modificado desde {request.remote_addr}")
-    return jsonify(usuario)
+    return jsonify(copia)
 
 
 @app.delete("/usuarios/<usuario_id>")
 def eliminar_usuario(usuario_id):
-    usuario = USUARIOS.pop(usuario_id, None)
+    with semaforo:
+        usuario = USUARIOS.pop(usuario_id, None)
     if usuario is None:
         return jsonify({"error": f"El usuario {usuario_id} no existe"}), 404
     print(f"[usuarios] Usuario {usuario_id} eliminado desde {request.remote_addr}")

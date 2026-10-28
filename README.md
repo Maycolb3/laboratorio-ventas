@@ -59,7 +59,7 @@ flowchart LR
 | Servicio  | Contenedor           | Puerto | Endpoints                                                  |
 |-----------|----------------------|--------|------------------------------------------------------------|
 | usuarios  | servicio-usuarios    | 8001   | `GET /salud`, `GET /usuarios`, `GET /usuarios/<id>`, `POST /usuarios`, `PUT /usuarios/<id>`, `DELETE /usuarios/<id>` |
-| productos | servicio-productos   | 8002   | `GET /salud`, `GET /productos`, `GET /productos/<id>`, `POST /productos`, `PUT /productos/<id>`, `DELETE /productos/<id>` |
+| productos | servicio-productos   | 8002   | `GET /salud`, `GET /productos`, `GET /productos/<id>`, `POST /productos`, `PUT /productos/<id>`, `DELETE /productos/<id>`, `POST /productos/<id>/descontar`, `POST /operaciones/<id>/revertir` |
 | pedidos   | servicio-pedidos     | 8000   | `GET /salud`, `GET /pedidos`, `POST /pedidos`              |
 | interfaz  | servicio-interfaz    | 8080   | `GET /` (página web), `/api/<servicio>/<ruta>` (reenvío)   |
 
@@ -182,6 +182,18 @@ Abrir en el navegador **http://localhost:8080**. La página muestra:
 
 El navegador no llama directamente a los servicios: la interfaz reenvía cada petición (`/api/pedidos/pedidos` → `http://pedidos:8000/pedidos`). Es un cliente más, como PowerShell o Postman; la comunicación entre pedidos, usuarios y productos sigue siendo la misma. La evidencia directa de esa comunicación sigue estando en `docker compose logs pedidos`.
 
+## Inventario y concurrencia
+
+Cada pedido aceptado descuenta su cantidad de las existencias del producto.
+
+- **Operación atómica.** Pedidos no consulta las existencias y luego descuenta en dos pasos: llama a `POST /productos/<id>/descontar`, y productos verifica y descuenta en un solo paso. Si fueran dos peticiones, dos pedidos simultáneos podrían ver las mismas unidades disponibles y venderlas dos veces.
+- **Semáforo.** Flask atiende cada petición en un hilo distinto. En cada servicio, un semáforo binario (`threading.Lock`) deja entrar a un solo hilo a la vez en las secciones críticas: descontar y reponer existencias, crear, modificar y eliminar, generar IDs y listar.
+- **Compensación.** Cada descuento lleva un identificador de operación único. Si la respuesta de productos no llega (por ejemplo, por un tiempo de espera agotado), pedidos no sabe si se descontó, así que llama a `POST /operaciones/<id>/revertir`. Una operación solo se aplica y se revierte una vez, de modo que un reintento no descuenta ni devuelve unidades dos veces.
+
+La interfaz web tiene una **prueba de concurrencia** (sección 03): envía muchos pedidos a la vez y comprueba que `existencias antes − aceptados × cantidad = existencias después`.
+
+Limitación: el semáforo funciona dentro de un solo proceso. Con varias réplicas de productos haría falta una base de datos con transacciones, por ejemplo `UPDATE ... SET existencias = existencias - n WHERE existencias >= n`.
+
 ## Preparación de las pruebas de compra (PowerShell)
 
 `Invoke-RestMethod` lanza una excepción cuando la respuesta es un error (4xx o 5xx) y oculta el cuerpo JSON. Para ver siempre el código HTTP y el JSON, pegar esta función una vez en la ventana de PowerShell (funciona en Windows PowerShell 5.1 y en PowerShell 7):
@@ -288,9 +300,9 @@ Resultado esperado después de la compra válida, en `pedidos`:
 [pedidos] Solicitud recibida: {'usuario_id': 'U01', 'producto_id': 'P01', 'cantidad': 2}
 [pedidos] -> GET http://usuarios:8001/usuarios/U01
 [pedidos] <- 200 desde el servicio de usuarios
-[pedidos] -> GET http://productos:8002/productos/P01
+[pedidos] -> POST http://productos:8002/productos/P01/descontar
 [pedidos] <- 200 desde el servicio de productos
-[pedidos] Pedido PED-0001 creado. Total: 100000
+[pedidos] Pedido PED-0001 creado. Total: 100000. Quedan 8 de P01
 ```
 
 Y en `usuarios` (la IP es la del contenedor de pedidos, puede variar):

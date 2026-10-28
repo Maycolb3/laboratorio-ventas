@@ -81,7 +81,8 @@
   .crud { display: grid; gap: 10px; align-items: end; margin-bottom: 10px; }
   .crud.usuarios { grid-template-columns: 72px minmax(0, 1fr) 116px; }
   .crud.productos { grid-template-columns: 72px minmax(0, 1fr) 104px 84px; }
-  @media (max-width: 560px) { .crud.usuarios, .crud.productos { grid-template-columns: 1fr 1fr; } }
+  .crud.concurrencia { grid-template-columns: 120px 160px 120px auto; justify-content: start; }
+  @media (max-width: 560px) { .crud.usuarios, .crud.productos, .crud.concurrencia { grid-template-columns: 1fr 1fr; } }
   .crud .acciones { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
   .crud .acciones button { padding: 6px 11px; }
   .metodo { font: 10px var(--mono); letter-spacing: .06em; opacity: .6; margin-left: 5px; }
@@ -131,7 +132,7 @@
   tr.clic { cursor: pointer; }
   tr.clic:hover td { background: var(--superficie); }
   .barra { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
-  .bloque + .bloque { margin-top: 32px; }
+  .bloque + .bloque, .tabla + .bloque { margin-top: 32px; }
 
   footer { border-top: 1px solid var(--linea); padding: 20px 0 40px; font-size: 12px; color: var(--tenue); }
 </style>
@@ -160,7 +161,8 @@
     <div class="cabeza">
       <div class="etiqueta-mono">02</div>
       <h2>Crear un pedido</h2>
-      <p>Envía <code>POST /pedidos</code>. Pedidos consulta a usuarios y a productos antes de aceptar la compra.</p>
+      <p>Envía <code>POST /pedidos</code>. Pedidos verifica al usuario y pide a productos que descuente las existencias antes de aceptar la compra.</p>
+      <p>Cada pedido aceptado descuenta su cantidad del inventario.</p>
       <p>Puede escribir IDs que no existen para probar los errores.</p>
     </div>
     <div class="columnas">
@@ -189,7 +191,7 @@
       <h2>Pruebas del laboratorio</h2>
       <p>Casos de los pasos 4 a 6 de la guía y las validaciones adicionales.</p>
       <p>Haga clic en una fila para ejecutar solo ese caso.</p>
-      <p>Los casos usan los datos iniciales (U01, U03, P01, P03). Si los cambia en la sección 04, algunos resultados cambiarán.</p>
+      <p>Los casos usan los datos iniciales (U01, U03, P01, P03). Cada compra válida descuenta 2 unidades de P01: si se agotan, repóngalas en la sección 04.</p>
     </div>
     <div>
       <div class="barra">
@@ -201,6 +203,19 @@
           <thead><tr><th>Caso</th><th>Usuario</th><th>Producto</th><th class="num">Cant.</th><th>Esperado</th><th>Obtenido</th><th>Mensaje</th></tr></thead>
           <tbody id="pruebas"></tbody>
         </table>
+      </div>
+
+      <div class="bloque">
+        <div class="etiqueta-mono subtitulo">Prueba de concurrencia</div>
+        <p class="nota" style="margin:0 0 12px">Envía muchos pedidos al mismo tiempo (usuario U01) sobre un producto.
+          Como productos verifica y descuenta dentro de un semáforo, se aceptan solo las unidades que hay y el inventario nunca queda negativo.</p>
+        <form class="crud concurrencia" id="form-concurrencia">
+          <label><span class="etiqueta-mono">Producto</span><input name="producto" list="lista-productos" value="P02" autocomplete="off"></label>
+          <label><span class="etiqueta-mono">Pedidos simultáneos</span><input name="total" type="number" min="1" max="100" value="20"></label>
+          <label><span class="etiqueta-mono">Cantidad c/u</span><input name="cantidad" type="number" min="1" value="1"></label>
+          <button class="primario" type="submit">Lanzar</button>
+        </form>
+        <div class="resultado-crud" id="resultado-concurrencia"></div>
       </div>
     </div>
   </section>
@@ -312,8 +327,8 @@ const PASOS = [
   ["Servicio de pedidos", "Recibe la solicitud POST /pedidos"],
   ["Validación de datos", "usuario_id, producto_id y cantidad entera mayor que cero"],
   ["Servicio de usuarios", "GET /usuarios/{id}: debe existir y estar activo"],
-  ["Servicio de productos", "GET /productos/{id}: debe existir y tener existencias"],
-  ["Pedido creado", "Se calcula el total y se guarda en memoria"],
+  ["Servicio de productos", "POST /productos/{id}/descontar: verifica y descuenta las existencias en un solo paso atómico"],
+  ["Pedido creado", "Se calcula el total y se registra con un ID único"],
 ];
 
 const $ = (id) => document.getElementById(id);
@@ -493,7 +508,7 @@ async function accionCrud(form, accion) {
   cargarDatos();
 }
 
-for (const form of document.querySelectorAll(".crud")) {
+for (const form of document.querySelectorAll(".crud[data-servicio]")) {
   form.addEventListener("submit", (evento) => {
     evento.preventDefault();
     accionCrud(form, evento.submitter?.dataset.accion || "crear");
@@ -589,6 +604,43 @@ $("ejecutar-todas").addEventListener("click", async (evento) => {
   evento.target.disabled = true;
   for (let i = 0; i < PRUEBAS.length; i++) await ejecutarPrueba(i);
   evento.target.disabled = false;
+  cargarDatos();
+});
+
+// Lanza todos los pedidos a la vez y comprueba: existencias antes − aceptados × cantidad = existencias después.
+$("form-concurrencia").addEventListener("submit", async (evento) => {
+  evento.preventDefault();
+  const form = evento.target, caja = $("resultado-concurrencia");
+  const producto = form.elements.producto.value.trim();
+  const total = Math.min(Number(form.elements.total.value) || 1, 100);
+  const cantidad = Number(form.elements.cantidad.value) || 1;
+  const ruta = `productos/${encodeURIComponent(producto)}`;
+
+  const antes = await llamar("productos", ruta);
+  if (antes.codigo !== 200) {
+    caja.innerHTML = `${codigoHtml(antes.codigo)}<span class="alerta">${escapar(antes.datos?.error || "No se pudo consultar el producto")}</span>`;
+    return;
+  }
+  evento.submitter.disabled = true;
+  caja.innerHTML = `<span>Enviando ${total} pedidos simultáneos…</span>`;
+  const cuerpo = JSON.stringify({ usuario_id: "U01", producto_id: producto, cantidad });
+  const respuestas = await Promise.all(Array.from({ length: total }, () =>
+    llamar("pedidos", "pedidos", { method: "POST", headers: { "Content-Type": "application/json" }, body: cuerpo })));
+  const despues = await llamar("productos", ruta);
+  evento.submitter.disabled = false;
+
+  const aceptados = respuestas.filter((r) => r.codigo === 201).length;
+  const rechazados = respuestas.filter((r) => r.codigo === 409).length;
+  const otros = total - aceptados - rechazados;
+  const inicial = antes.datos.existencias, final = despues.datos?.existencias;
+  const consistente = final === inicial - aceptados * cantidad && final >= 0;
+  caja.innerHTML = `<span>Existencias antes: <b>${inicial}</b></span>
+    <span>${codigoHtml(201)} ${aceptados} aceptados</span><span>${codigoHtml(409)} ${rechazados} rechazados</span>
+    ${otros ? `<span class="alerta">${otros} con otro código</span>` : ""}
+    <span>Después: <b>${final ?? "—"}</b></span>
+    <span class="${consistente ? "" : "alerta"}">${consistente
+      ? `✓ consistente: ${inicial} − ${aceptados} × ${cantidad} = ${final}`
+      : "✕ el inventario no coincide con los pedidos aceptados"}</span>`;
   cargarDatos();
 });
 
