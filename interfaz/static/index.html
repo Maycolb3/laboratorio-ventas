@@ -1,329 +1,593 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" data-tema="claro">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sistema de ventas</title>
+<script>
+  // Tema claro por defecto; el botón de la cabecera cambia a oscuro y se recuerda en este navegador.
+  try { if (localStorage.getItem("tema") === "oscuro") document.documentElement.dataset.tema = "oscuro"; } catch {}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,700;1,9..144,500;1,9..144,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
+  /* ---------- Paleta ----------
+     Cada servicio tiene su color y se usa igual en todo: diagrama, tablas,
+     registro y recorrido. Verde / ámbar / rojo quedan solo para el estado. */
   :root {
-    --fondo: #f7f7f5; --superficie: #ffffff; --tinta: #1a1a1a; --suave: #5c5c58; --tenue: #8f8f8a; --linea: #e2e2de;
-    --verde: #3f7a52; --ambar: #9a6a1c; --rojo: #b3412e;
-    --mono: ui-monospace, "Cascadia Mono", "Cascadia Code", Consolas, Menlo, monospace;
-    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --fondo: #f3f4f8; --superficie: #ffffff; --hundido: #eef0f5;
+    --tinta: #14161f; --suave: #545b6c; --tenue: #8a90a0; --linea: #e3e6ee; --arista: #c5cad7;
+    --usuarios: #4467f5; --productos: #10a189; --pedidos: #e0488e; --bd: #7a5cf5; --interfaz: #14161f;
+    --ok: #17a05a; --aviso: #e08e0b; --error: #e5484d;
+    --oro: #ffc94d;
+    --marino: #1b2459; --marino-texto: #eef0ff; --marino-tenue: #a9b0dd;
+    --tinte: 9%;          /* intensidad de los bloques de color suave */
+    --display: "Fraunces", Georgia, serif;
+    --sans: "Plus Jakarta Sans", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", "Cascadia Mono", Consolas, ui-monospace, monospace;
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --fondo: #121212; --superficie: #1a1a1a; --tinta: #ececea; --suave: #a3a39e; --tenue: #6f6f6a; --linea: #2a2a28;
-      --verde: #7fb38f; --ambar: #d0a35a; --rojo: #e0715f;
-    }
+  :root[data-tema="oscuro"] {
+    --fondo: #0f1118; --superficie: #171a24; --hundido: #1f2330;
+    --tinta: #eceef5; --suave: #b2b7c6; --tenue: #7b8193; --linea: #272c3a; --arista: #3a4153;
+    --usuarios: #7f9bff; --productos: #3cc9b2; --pedidos: #f27bb3; --bd: #a993ff; --interfaz: #eceef5;
+    --ok: #4cc685; --aviso: #f0b23e; --error: #f47a7d;
+    --marino: #1d2560; --tinte: 14%;
   }
+
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--fondo); color: var(--tinta); font: 14px/1.55 var(--sans); }
-  code { font-family: var(--mono); font-size: 12.5px; }
-  .contenedor { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
-  @media (max-width: 560px) { .contenedor { padding: 0 16px; } }
+  html { color-scheme: light; }
+  :root[data-tema="oscuro"] { color-scheme: dark; }
+  body { margin: 0; background: var(--fondo); color: var(--tinta); font: 14px/1.55 var(--sans); -webkit-font-smoothing: antialiased; }
+  code, .mono { font-family: var(--mono); font-size: 12.5px; }
+  h1, h2, h3, h4 { margin: 0; font-family: var(--display); font-weight: 600; letter-spacing: -.01em; }
+  .marco { max-width: 1320px; margin: 0 auto; padding: 0 28px; }
+  @media (max-width: 640px) { .marco { padding: 0 16px; } }
+  .tenue { color: var(--tenue); }
+  .alerta { color: var(--error); }
+  .rotulo { font: 600 11px var(--sans); letter-spacing: .09em; text-transform: uppercase; color: var(--tenue); }
 
-  .etiqueta-mono { font: 11px/1.4 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--tenue); }
+  /* ---------- Cabecera ---------- */
+  .cabecera { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 26px 0 22px; }
+  .marca { display: flex; align-items: center; gap: 14px; margin-right: auto; }
+  .logo { width: 44px; height: 44px; border-radius: 14px; background: var(--marino); display: grid; place-items: center; flex: none; }
+  .logo svg { width: 28px; height: 28px; }
+  .marca h1 { font-size: 26px; line-height: 1.1; }
+  .marca h1 em { font-style: italic; font-weight: 500; color: var(--pedidos); }
+  .marca small { display: block; margin-top: 3px; font-size: 12.5px; color: var(--suave); }
+  .pastilla { display: inline-flex; align-items: center; gap: 8px; padding: 7px 13px; border-radius: 999px; background: var(--superficie);
+              border: 1px solid var(--linea); font: 500 12.5px var(--sans); color: var(--suave); max-width: 100%; }
+  .pastilla span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pastilla:empty { display: none; }
+  .boton-tema { width: 38px; height: 38px; padding: 0; display: grid; place-items: center; border-radius: 999px; }
+  .boton-tema svg { width: 17px; height: 17px; }
 
-  /* Cabecera */
-  .pagina { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; padding: 40px 0 28px; }
-  .pagina h1 { margin: 6px 0 0; font-size: 26px; font-weight: 600; letter-spacing: -.015em; }
-  .resumen { font: 12px var(--mono); color: var(--suave); display: flex; align-items: center; gap: 8px; }
+  .punto { width: 8px; height: 8px; border-radius: 50%; background: var(--tenue); flex: none; display: inline-block; }
+  .punto.arriba { background: var(--ok); } .punto.parcial { background: var(--aviso); } .punto.abajo { background: var(--error); }
 
-  /* Secciones: título a la izquierda, contenido a la derecha */
-  .seccion { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 40px; padding: 32px 0; border-top: 1px solid var(--linea); }
-  .seccion h2 { margin: 6px 0 8px; font-size: 15px; font-weight: 600; }
-  .seccion .cabeza p { margin: 0 0 10px; color: var(--suave); font-size: 13px; }
-  @media (max-width: 900px) { .seccion { grid-template-columns: 1fr; gap: 18px; } }
-  .columnas { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; }
-  @media (max-width: 1000px) { .columnas { grid-template-columns: 1fr; } }
+  /* ---------- Bento ---------- */
+  .bento { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px; }
+  .bloque { background: var(--superficie); border: 1px solid var(--linea); border-radius: 22px; padding: 22px 24px; min-width: 0; position: relative; }
+  .bloque-cabeza { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .bloque-cabeza h2 { font-size: 22px; }
+  .bloque-cabeza h3 { font-size: 19px; }
+  .bloque-cabeza p { margin: 3px 0 0; font-size: 13px; color: var(--suave); max-width: 560px; }
+  .suave { background: color-mix(in srgb, var(--c) var(--tinte), var(--superficie)); border-color: color-mix(in srgb, var(--c) 20%, var(--linea)); }
+
+  .b-arquitectura { grid-column: span 8; grid-row: span 2; }
+  .b-ventas { grid-column: span 4; }
+  .b-bd { grid-column: span 4; --c: var(--bd); }
+  .b-inventario { grid-column: span 7; --c: var(--productos); }
+  .b-reparto { grid-column: span 5; --c: var(--pedidos); }
+  .b-mesa { grid-column: span 12; padding: 0; overflow: hidden; }
+  .b-pedidos { grid-column: span 7; }
+  .b-registro { grid-column: span 5; }
+  @media (max-width: 1100px) {
+    .b-arquitectura, .b-mesa { grid-column: span 12; grid-row: auto; }
+    .b-ventas, .b-bd, .b-inventario, .b-reparto { grid-column: span 6; }
+    .b-pedidos, .b-registro { grid-column: span 12; }
+  }
+  @media (max-width: 720px) { .bento > * { grid-column: span 12 !important; } }
+
+  /* Arquitectura en vivo (diagrama SVG) */
+  .vivo { display: inline-flex; align-items: center; gap: 7px; font: 600 11px var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--tenue); }
+  .vivo .punto { background: var(--ok); box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 50%, transparent); animation: onda 2.2s infinite; }
+  @keyframes onda { 70% { box-shadow: 0 0 0 7px transparent; } }
+  .lienzo { border-radius: 16px; background: var(--hundido); padding: 8px 6px;
+            background-image: radial-gradient(color-mix(in srgb, var(--tinta) 9%, transparent) 1px, transparent 1px); background-size: 16px 16px; }
+  .topologia { display: block; width: 100%; height: auto; overflow: visible; }
+  .topologia .arista { fill: none; stroke: var(--arista); stroke-width: 2; stroke-dasharray: 5 7; animation: flujo 1.6s linear infinite; }
+  .topologia .arista.cortada { stroke: var(--error); animation: none; opacity: .55; }
+  @keyframes flujo { to { stroke-dashoffset: -24; } }
+  .topologia .nodo rect.caja { fill: var(--superficie); stroke: color-mix(in srgb, var(--c) 55%, transparent); stroke-width: 1.5; transition: filter .3s; }
+  .topologia .nodo.parcial rect.caja { stroke: var(--aviso); }
+  .topologia .nodo.abajo rect.caja { stroke: var(--error); stroke-dasharray: 5 4; }
+  .topologia .nodo.golpe rect.caja { filter: drop-shadow(0 0 9px color-mix(in srgb, var(--c) 75%, transparent)); stroke-width: 2.5; stroke: var(--c); }
+  .topologia .nodo .franja { fill: var(--c); }
+  .topologia text { fill: var(--tinta); font-family: var(--sans); }
+  .topologia .nombre { font-size: 15px; font-weight: 700; }
+  .topologia .puerto, .topologia .cuenta { font: 10.5px var(--mono); fill: var(--tenue); }
+  .topologia .cuenta { font-size: 11px; }
+  .topologia .p-ok { fill: var(--ok); } .topologia .p-mal { fill: none; stroke: var(--error); stroke-width: 1.6; }
+  .topologia .p-lider { stroke: var(--oro); stroke-width: 3; }
+  .topologia .paquete { filter: drop-shadow(0 0 5px currentColor); }
+
+  .replicas { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+  @media (max-width: 720px) { .replicas { grid-template-columns: 1fr; } }
+  .grupo h4 { font: 700 12.5px var(--sans); display: flex; align-items: center; gap: 7px; margin-bottom: 6px; }
+  .grupo h4 i { width: 10px; height: 10px; border-radius: 3px; background: var(--c); }
+  .grupo h4 span { margin-left: auto; font: 500 11px var(--mono); color: var(--tenue); }
+  .replica { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0 8px; align-items: center; padding: 7px 10px; margin-bottom: 6px;
+             border-radius: 10px; background: var(--hundido); border: 1px solid transparent; transition: border-color .25s, box-shadow .25s; }
+  .replica b { font-size: 12.5px; font-weight: 600; }
+  .replica small { grid-column: 2; font: 10.5px var(--mono); color: var(--tenue); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .replica.arriba .punto { background: var(--ok); }
+  .replica.abajo { background: transparent; border: 1px dashed color-mix(in srgb, var(--error) 60%, transparent); }
+  .replica.abajo .punto { background: var(--error); }
+  .replica.abajo b { color: var(--error); text-decoration: line-through; }
+  .replica.golpe { border-color: var(--c); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 22%, transparent); }
+  .pie-arquitectura { margin: 8px 0 0; font-size: 12.5px; color: var(--suave); }
+
+  /* Ventas: bloque de color fuerte con curva acumulada */
+  .b-ventas { background: var(--marino); border-color: var(--marino); color: var(--marino-texto); overflow: hidden; display: flex; flex-direction: column; }
+  .b-ventas .rotulo { color: var(--marino-tenue); }
+  .cifra { font: 700 44px/1.05 var(--display); letter-spacing: -.02em; margin: 8px 0 2px; font-variant-numeric: lining-nums tabular-nums; }
+  .b-ventas .nota { font-size: 12.5px; color: var(--marino-tenue); }
+  .curva { display: block; width: calc(100% + 48px); height: 78px; margin: 10px -24px 0; }
+  .curva .linea { fill: none; stroke: var(--oro); stroke-width: 2.5; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+  .curva .area { fill: url(#degradado-oro); }
+  .trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: auto; padding-top: 12px; border-top: 1px solid rgba(255,255,255,.12); }
+  .trio b { display: block; font: 700 22px/1.1 var(--display); font-variant-numeric: lining-nums; }
+  .trio span { font-size: 12px; color: var(--marino-tenue); }
+  .trio .agotados b { color: #ff9a9d; }
+
+  /* Base de datos: consenso Raft */
+  .raft { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 16px; align-items: center; }
+  @media (max-width: 420px) { .raft { grid-template-columns: 1fr; } }
+  .raft svg { width: 100%; height: auto; overflow: visible; }
+  .raft .enlace { stroke: color-mix(in srgb, var(--bd) 35%, transparent); stroke-width: 1.5; }
+  .raft .enlace.roto { stroke: var(--error); stroke-dasharray: 3 4; opacity: .5; }
+  .raft circle.ok { fill: var(--bd); }
+  .raft circle.mal { fill: var(--superficie); stroke: var(--error); stroke-width: 2; stroke-dasharray: 4 3; }
+  .raft circle.lider { stroke: var(--oro); stroke-width: 4; }
+  .raft text { font: 600 10px var(--mono); fill: var(--suave); text-anchor: middle; }
+  .raft text.corona { font-size: 13px; fill: var(--oro); }
+  .raft-estado { font: 700 17px/1.25 var(--display); }
+  .raft-lista { list-style: none; margin: 8px 0 10px; padding: 0; font-size: 12.5px; display: grid; gap: 3px; }
+  .raft-lista li { display: flex; align-items: center; gap: 7px; }
+  .raft-lista li.mal { color: var(--error); }
+  .raft-lista em { font-style: normal; margin-left: auto; font: 500 11px var(--mono); color: var(--tenue); }
+  .tramos { display: flex; gap: 4px; margin-bottom: 4px; }
+  .tramos i { flex: 1; height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--bd) 18%, transparent); }
+  .tramos i.lleno { background: var(--bd); }
+  .mayoria-texto { font-size: 11.5px; color: var(--suave); }
+
+  /* Inventario */
+  .inventario { list-style: none; margin: 0; padding: 0 4px 0 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; max-height: 210px; overflow: auto; }
+  @media (max-width: 560px) { .inventario { grid-template-columns: 1fr; } }
+  .inventario li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 10px; font-size: 13px; }
+  .inventario .nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .inventario .valor { font: 600 12px var(--mono); }
+  .inventario .barra { grid-column: 1 / -1; height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--productos) 15%, transparent); overflow: hidden; }
+  .inventario .barra i { display: block; height: 100%; border-radius: 4px; background: var(--productos); transition: width .5s ease; }
+  .inventario li.bajo .barra i { background: var(--aviso); }
+  .inventario li.agotado .valor { color: var(--error); }
+
+  /* Reparto entre réplicas de pedidos (dona) */
+  .reparto { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 18px; align-items: center; }
+  .dona { width: 130px; height: 130px; }
+  .dona circle { fill: none; stroke-width: 16; }
+  .dona .fondo-dona { stroke: color-mix(in srgb, var(--pedidos) 14%, transparent); }
+  .dona text { font: 700 22px var(--display); fill: var(--tinta); text-anchor: middle; }
+  .dona text.sub { font: 500 10px var(--sans); fill: var(--suave); }
+  .leyenda { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; font-size: 13px; }
+  .leyenda li { display: flex; align-items: center; gap: 8px; }
+  .leyenda i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+  .leyenda b { margin-left: auto; font: 600 12px var(--mono); }
+
+  /* ---------- Mesa de trabajo ---------- */
+  .mesa-cabeza { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding: 18px 24px; border-bottom: 1px solid var(--linea); }
+  .mesa-cabeza h2 { font-size: 22px; }
+  .segmentos { display: inline-flex; gap: 4px; padding: 4px; border-radius: 999px; background: var(--hundido); overflow-x: auto; max-width: 100%; }
+  .segmentos button { border: 0; border-radius: 999px; background: none; padding: 8px 16px; font: 600 13px var(--sans); color: var(--suave); white-space: nowrap; }
+  .segmentos button:hover { color: var(--tinta); }
+  .segmentos button[aria-selected="true"] { background: var(--superficie); color: var(--tinta); box-shadow: 0 1px 3px rgba(20,22,31,.12); }
+  .panel { padding: 22px 24px 26px; }
+  @media (max-width: 640px) { .panel { padding: 18px 16px; } .mesa-cabeza { padding: 16px; } }
+  .panel-intro { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 18px; }
+  .panel-intro p { margin: 0; color: var(--suave); max-width: 700px; font-size: 13.5px; }
+  .dos { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; }
+  @media (max-width: 960px) { .dos { grid-template-columns: 1fr; } }
+
+  label { display: grid; gap: 6px; min-width: 0; }
+  label > span { font: 600 11px var(--sans); letter-spacing: .07em; text-transform: uppercase; color: var(--tenue); }
+  input, select { font: 14px var(--mono); padding: 10px 12px; border: 1px solid var(--linea); border-radius: 12px;
+                  background: var(--hundido); color: var(--tinta); width: 100%; }
+  input:focus, select:focus { outline: none; border-color: var(--usuarios); background: var(--superficie); box-shadow: 0 0 0 4px color-mix(in srgb, var(--usuarios) 18%, transparent); }
+  button { font: 600 13.5px var(--sans); padding: 9px 16px; border-radius: 12px; cursor: pointer;
+           border: 1px solid var(--linea); background: var(--superficie); color: var(--tinta); }
+  button:hover { border-color: var(--tinta); }
+  button.primario { background: var(--tinta); border-color: var(--tinta); color: var(--superficie); }
+  button.primario:hover { background: var(--marino); border-color: var(--marino); color: #fff; }
+  button.peligro:hover { border-color: var(--error); color: var(--error); }
+  button:disabled { opacity: .5; cursor: wait; }
+  .metodo { font: 600 10px var(--mono); opacity: .55; margin-left: 6px; }
+
+  #formulario { display: grid; grid-template-columns: 1fr 1fr 100px; gap: 12px; align-items: end; }
+  #formulario button { grid-column: 1 / -1; justify-self: start; padding: 11px 22px; }
+  @media (max-width: 560px) { #formulario { grid-template-columns: 1fr; } }
+
+  .recorrido { list-style: none; margin: 24px 0 0; padding: 0; }
+  .recorrido li { position: relative; padding: 0 0 15px 30px; font-size: 13px; color: var(--suave); }
+  .recorrido li::before { content: ""; position: absolute; left: 0; top: 3px; width: 14px; height: 14px; border-radius: 50%;
+                          border: 2px solid var(--c); background: var(--superficie); box-sizing: border-box; }
+  .recorrido li::after { content: ""; position: absolute; left: 6.5px; top: 20px; bottom: 1px; width: 1px; background: var(--linea); }
+  .recorrido li:last-child::after { display: none; }
+  .recorrido b { display: block; color: var(--tinta); font-weight: 600; }
+  .recorrido li.ok::before { background: var(--c); }
+  .recorrido li.fallo::before { background: var(--error); border-color: var(--error); }
+  .recorrido li.fallo, .recorrido li.fallo b { color: var(--error); }
+  .recorrido li.omitido { opacity: .38; }
+  .nota { margin: 6px 0 0; font-size: 12px; color: var(--tenue); }
+
+  .linea-respuesta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-bottom: 10px; font: 12px var(--mono); color: var(--suave); }
+  .codigo { font: 600 12px var(--mono); display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 999px;
+            background: color-mix(in srgb, currentColor 13%, transparent); white-space: nowrap; }
+  .c2 { color: var(--ok); } .c4 { color: var(--aviso); } .c5 { color: var(--error); }
+  pre { margin: 0; padding: 14px 16px; background: #12141c; color: #e6e8f0; border-radius: 14px; font: 12.5px/1.65 var(--mono); overflow-x: auto; max-height: 340px; }
+  .vacio { color: var(--tenue); font-size: 13px; padding: 18px 0; }
   .subtitulo { margin: 0 0 10px; }
 
-  /* Indicador de estado */
-  .punto { width: 7px; height: 7px; border-radius: 50%; background: var(--tenue); flex: none; display: inline-block; }
-  .arriba .punto, .punto.arriba { background: var(--verde); }
-  .abajo .punto, .punto.abajo { background: var(--rojo); }
-
-  .parcial .punto, .punto.parcial { background: var(--ambar); }
-
-  /* Estado del clúster: una tarjeta por servicio, con sus réplicas */
-  .servicios { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; border: 1px solid var(--linea); background: var(--linea); }
-  @media (max-width: 760px) { .servicios { grid-template-columns: 1fr; } }
-  .servicio { padding: 16px 18px; background: var(--superficie); min-width: 0; }
-  .servicio .nombre { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-  .servicio .nombre b { font-size: 15px; font-weight: 600; }
-  .servicio .estado { display: flex; align-items: center; gap: 7px; margin: 6px 0 10px; font-size: 13px; color: var(--suave); }
-  .servicio.parcial .estado { color: var(--ambar); }
-  .servicio.abajo .estado { color: var(--rojo); }
-  .replica { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-top: 1px solid var(--linea); font: 12px var(--mono); min-width: 0; }
-  .replica .dir { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .replica .detalle { margin-left: auto; color: var(--tenue); white-space: nowrap; }
-  .replica.abajo .dir { color: var(--rojo); text-decoration: line-through; }
-  /* Cada réplica muestra su propio color, aunque la tarjeta esté en ámbar */
-  .replica.arriba .punto { background: var(--verde); }
-  .replica.abajo .punto { background: var(--rojo); }
-  .lider { font-weight: 600; color: var(--tinta); }
-  .cabecera-derecha { display: grid; gap: 4px; justify-items: end; }
-  dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 14px; font-size: 12px; }
-  dt { color: var(--tenue); }
-  dd { margin: 0; font-family: var(--mono); overflow-wrap: anywhere; }
-
-  /* Formularios */
-  #formulario { display: grid; grid-template-columns: 1fr 1fr 96px; gap: 12px; align-items: end; }
-  @media (max-width: 560px) { #formulario { grid-template-columns: 1fr; } }
-  label { display: grid; gap: 5px; min-width: 0; }
-  input, select { font: 14px var(--mono); padding: 8px 10px; border: 1px solid var(--linea); border-radius: 3px;
-          background: var(--superficie); color: var(--tinta); width: 100%; }
-  input:focus, select:focus { outline: none; border-color: var(--tinta); }
-  input[readonly] { color: var(--suave); background: transparent; }
-  button { font: 13px var(--sans); padding: 8px 14px; border-radius: 3px; cursor: pointer;
-           border: 1px solid var(--linea); background: transparent; color: var(--tinta); }
-  button:hover { border-color: var(--tinta); }
-  button.primario { background: var(--tinta); border-color: var(--tinta); color: var(--fondo); font-weight: 500; }
-  button.primario:hover { opacity: .85; }
-  button:disabled { opacity: .5; cursor: wait; }
-  #formulario button { grid-column: 1 / -1; justify-self: start; }
-
-  /* Gestión (CRUD) de usuarios y productos */
-  .crud { display: grid; gap: 10px; align-items: end; margin-bottom: 10px; }
-  .crud.usuarios { grid-template-columns: 72px minmax(0, 1fr) 116px; }
-  .crud.productos { grid-template-columns: 72px minmax(0, 1fr) 104px 84px; }
-  .crud.concurrencia { grid-template-columns: 120px 160px 120px auto; justify-content: start; }
-  @media (max-width: 560px) { .crud.usuarios, .crud.productos, .crud.concurrencia { grid-template-columns: 1fr 1fr; } }
-  .crud .acciones { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
-  .crud .acciones button { padding: 6px 11px; }
-  .metodo { font: 10px var(--mono); letter-spacing: .06em; opacity: .6; margin-left: 5px; }
-  .resultado-crud { min-height: 22px; margin-bottom: 14px; font: 12px var(--mono); color: var(--suave);
-                    display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
-  .resultado-crud .detalle { color: var(--tenue); overflow-wrap: anywhere; }
-  tr.seleccionado td { background: var(--superficie); font-weight: 600; }
-
-  /* Registro con desplazamiento propio */
-  .desplazable { max-height: 380px; overflow: auto; border-bottom: 1px solid var(--linea); }
-  .desplazable th { position: sticky; top: 0; z-index: 1; background: var(--fondo); padding-top: 4px; }
-
-  /* Recorrido de la solicitud */
-  .recorrido { list-style: none; margin: 26px 0 0; padding: 0; }
-  .recorrido li { position: relative; padding: 0 0 14px 24px; font-size: 13px; color: var(--suave); }
-  .recorrido li::before { content: ""; position: absolute; left: 2px; top: 6px; width: 7px; height: 7px; border-radius: 50%;
-                          border: 1px solid var(--tenue); background: var(--fondo); }
-  .recorrido li::after { content: ""; position: absolute; left: 5.5px; top: 16px; bottom: 0; width: 1px; background: var(--linea); }
-  .recorrido li:last-child::after { display: none; }
-  .recorrido b { display: block; color: var(--tinta); font-weight: 500; }
-  .recorrido li.ok::before { background: var(--tinta); border-color: var(--tinta); }
-  .recorrido li.fallo::before { background: var(--rojo); border-color: var(--rojo); }
-  .recorrido li.fallo, .recorrido li.fallo b { color: var(--rojo); }
-  .recorrido li.omitido { opacity: .4; }
-  .nota { margin: 4px 0 0; font-size: 12px; color: var(--tenue); }
-
-  /* Respuesta */
-  .linea-respuesta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-bottom: 10px; font: 12px var(--mono); color: var(--suave); }
-  .codigo { font-family: var(--mono); font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
-  .codigo::before { content: ""; width: 6px; height: 6px; border-radius: 1px; background: currentColor; }
-  .c2 { color: var(--verde); } .c4 { color: var(--ambar); } .c5 { color: var(--rojo); }
-  pre { margin: 0; padding: 14px 16px; background: var(--superficie); border: 1px solid var(--linea); border-radius: 3px;
-        font: 12.5px/1.6 var(--mono); overflow-x: auto; max-height: 360px; }
-  .vacio { color: var(--tenue); font-size: 13px; padding: 18px 0; }
-
   /* Tablas */
-  .tabla { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  /* La línea bajo el encabezado es una sombra para que siga visible cuando el encabezado queda fijo al desplazarse */
-  th { text-align: left; padding: 0 10px 8px 0; box-shadow: inset 0 -1px 0 var(--tinta);
-       font: 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--tenue); font-weight: 400; white-space: nowrap; }
-  td { padding: 9px 10px 9px 0; border-bottom: 1px solid var(--linea); white-space: nowrap; }
+  .tabla { overflow: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th { text-align: left; padding: 10px 12px 9px 0; position: sticky; top: 0; z-index: 1; background: var(--superficie); box-shadow: inset 0 -1px 0 var(--linea);
+       font: 600 11px var(--sans); letter-spacing: .07em; text-transform: uppercase; color: var(--tenue); white-space: nowrap; }
+  td { padding: 10px 12px 10px 0; border-bottom: 1px solid var(--linea); white-space: nowrap; }
+  td:first-child, th:first-child { padding-left: 8px; }
   .num { text-align: right; font-variant-numeric: tabular-nums; }
-  td.mono, .registro td { font-family: var(--mono); font-size: 12px; }
-  .alerta { color: var(--rojo); }
-  .tenue { color: var(--tenue); }
   tr.clic { cursor: pointer; }
-  tr.clic:hover td { background: var(--superficie); }
-  .barra { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
-  .bloque + .bloque, .tabla + .bloque { margin-top: 32px; }
+  tr.clic:hover td { background: var(--hundido); }
+  tr.seleccionado td { background: color-mix(in srgb, var(--oro) 25%, transparent); }
+  .id { font: 600 12px var(--mono); padding: 2px 8px; border-radius: 7px; color: var(--c); background: color-mix(in srgb, var(--c) 12%, transparent); }
+  .id.u { --c: var(--usuarios); } .id.p { --c: var(--productos); } .id.ped { --c: var(--pedidos); }
+  .estado-usuario { display: inline-flex; align-items: center; gap: 6px; }
+  .estado-usuario .punto { background: var(--ok); }
+  .estado-usuario.inactivo { color: var(--error); }
+  .estado-usuario.inactivo .punto { background: var(--error); }
 
-  footer { border-top: 1px solid var(--linea); padding: 20px 0 40px; font-size: 12px; color: var(--tenue); }
+  .barra-acciones { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .resultado-pruebas { font: 600 12.5px var(--sans); color: var(--suave); }
+
+  /* Concurrencia */
+  .form-conc { display: grid; grid-template-columns: 140px 170px 130px auto; gap: 12px; align-items: end; justify-content: start; }
+  @media (max-width: 640px) { .form-conc { grid-template-columns: 1fr 1fr; } }
+  .conc-resultado { margin-top: 22px; }
+  .conc-cifras { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  @media (max-width: 640px) { .conc-cifras { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .conc-cifras div { padding: 14px 16px; border-radius: 16px; background: var(--hundido); }
+  .conc-cifras .ok { background: color-mix(in srgb, var(--ok) 12%, var(--superficie)); }
+  .conc-cifras .rech { background: color-mix(in srgb, var(--aviso) 14%, var(--superficie)); }
+  .conc-cifras span { font-size: 12px; color: var(--suave); }
+  .conc-cifras b { display: block; font: 700 32px/1.1 var(--display); font-variant-numeric: lining-nums tabular-nums; }
+  .conc-cifras .ok b { color: var(--ok); } .conc-cifras .rech b { color: var(--aviso); }
+  .rafaga { display: flex; flex-wrap: wrap; gap: 5px; margin: 16px 0 10px; }
+  .rafaga i { width: 15px; height: 15px; border-radius: 50%; background: var(--hundido); border: 1px solid var(--linea); }
+  .rafaga i.c2 { background: var(--ok); border-color: var(--ok); } .rafaga i.c4 { background: var(--aviso); border-color: var(--aviso); }
+  .rafaga i.c5 { background: var(--error); border-color: var(--error); }
+  .veredicto { font: 600 13px var(--sans); margin: 0; }
+  .veredicto.bien { color: var(--ok); }
+
+  /* Gestión */
+  .gestion-titulo { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .gestion-titulo i { width: 12px; height: 12px; border-radius: 4px; background: var(--c); }
+  .gestion-titulo h4 { font-size: 19px; }
+  .gestion-titulo small { font: 11.5px var(--mono); color: var(--tenue); }
+  .crud { display: grid; gap: 10px; align-items: end; margin-bottom: 10px; }
+  .crud.usuarios { grid-template-columns: 84px minmax(0, 1fr) 124px; }
+  .crud.productos { grid-template-columns: 84px minmax(0, 1fr) 110px 100px; }
+  @media (max-width: 560px) { .crud.usuarios, .crud.productos { grid-template-columns: 1fr 1fr; } }
+  .crud .acciones { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+  .crud .acciones button { padding: 7px 13px; }
+  .resultado-crud { min-height: 26px; margin-bottom: 12px; font: 12px var(--mono); color: var(--suave); display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+  .resultado-crud .detalle { color: var(--tenue); overflow-wrap: anywhere; }
+  .gestion .tabla { max-height: 300px; border: 1px solid var(--linea); border-radius: 14px; }
+
+  /* Pedidos y registro */
+  .b-pedidos .tabla { max-height: 420px; }
+  .b-registro { background: #12141c; border-color: color-mix(in srgb, #12141c 70%, var(--linea)); color: #e6e8f0; display: flex; flex-direction: column; }
+  .b-registro .bloque-cabeza p { color: #8f95a8; }
+  .b-registro button { background: #1d2030; color: #e6e8f0; border-color: #2c3144; }
+  .b-registro button:hover { border-color: #e6e8f0; }
+  .contador { font: 11px var(--mono); color: #8f95a8; margin-bottom: 8px; }
+  .registro { list-style: none; margin: 0; padding: 0 4px 0 0; font: 12px/1.5 var(--mono); max-height: 400px; overflow: auto; flex: 1; }
+  .registro li { display: grid; grid-template-columns: 62px 46px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 5px 0; border-bottom: 1px solid #23273a; }
+  .registro li.vacio { display: block; color: #8f95a8; border: 0; }
+  .registro .hora { color: #8f95a8; }
+  .registro .verbo { font-weight: 600; color: var(--c); }
+  .registro .destino { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .registro .destino em { font-style: normal; color: var(--c); }
+  .registro .fin { display: flex; gap: 8px; align-items: baseline; white-space: nowrap; }
+  .registro .ms { color: #8f95a8; min-width: 50px; text-align: right; }
+  .b-registro .c2 { color: #5fd391; } .b-registro .c4 { color: #f3bb4c; } .b-registro .c5 { color: #f47d6c; }
+  .registro .s-usuarios { --c: #8ea6ff; } .registro .s-productos { --c: #48d3bd; } .registro .s-pedidos { --c: #f58bbd; } .registro .s-interfaz { --c: #8f95a8; }
+  @media (max-width: 560px) { .registro li { grid-template-columns: 44px minmax(0, 1fr) auto; } .registro .hora { display: none; } }
+
+  footer { padding: 24px 0 40px; font-size: 12px; color: var(--tenue); display: flex; gap: 8px 18px; flex-wrap: wrap; }
+  footer span { display: inline-flex; align-items: center; gap: 6px; }
+  footer i { width: 9px; height: 9px; border-radius: 3px; background: var(--c); display: inline-block; }
+
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 </style>
 </head>
 <body>
-<div class="contenedor">
-  <header class="pagina">
-    <div>
-      <div class="etiqueta-mono">Laboratorio · Docker · HTTP/JSON</div>
-      <h1>Sistema de ventas distribuido</h1>
+<div class="marco">
+  <header class="cabecera">
+    <div class="marca">
+      <div class="logo" aria-hidden="true">
+        <svg viewBox="0 0 28 28"><path d="M7 8L21 8L14 21Z" fill="none" stroke="#ffc94d" stroke-width="1.6"/>
+          <circle cx="7" cy="8" r="3.6" fill="#7f9bff"/><circle cx="21" cy="8" r="3.6" fill="#3cc9b2"/><circle cx="14" cy="21" r="3.6" fill="#f27bb3"/></svg>
+      </div>
+      <div>
+        <h1>Sistema de ventas <em>distribuido</em></h1>
+        <small>Microservicios en Docker · base de datos replicada con rqlite (Raft)</small>
+      </div>
     </div>
-    <div class="cabecera-derecha">
-      <div class="resumen" id="resumen"><span class="punto"></span>comprobando el clúster…</div>
-      <div class="resumen" id="entrada"></div>
-    </div>
+    <div class="pastilla" id="resumen"><span class="punto"></span><span>comprobando el clúster…</span></div>
+    <div class="pastilla" id="entrada"></div>
+    <button class="boton-tema" id="tema" title="Cambiar tema claro/oscuro" aria-label="Cambiar tema">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+    </button>
   </header>
 
-  <section class="seccion">
-    <div class="cabeza">
-      <div class="etiqueta-mono">01</div>
-      <h2>Estado del clúster</h2>
-      <p>Cada servicio tiene varias réplicas, en distintos contenedores o computadores, y la base de datos tiene tres nodos que se copian entre sí. Se revisa cada 3 segundos.</p>
-      <p>Detenga una réplica o un nodo: el sistema sigue respondiendo con los demás. La base solo necesita que funcione la mayoría de sus nodos (2 de 3).</p>
-    </div>
-    <div class="servicios" id="servicios"></div>
-  </section>
+  <main class="bento">
+    <!-- Arquitectura en vivo -->
+    <section class="bloque b-arquitectura">
+      <div class="bloque-cabeza">
+        <div>
+          <h2>Arquitectura en vivo</h2>
+          <p>Cada servicio corre en varias réplicas y la base de datos en tres nodos. Apague cualquiera: el sistema sigue con los demás. Al crear un pedido, su recorrido viaja por el diagrama.</p>
+        </div>
+        <span class="vivo"><span class="punto"></span><span id="ultima-revision">en vivo</span></span>
+      </div>
+      <div class="lienzo">
+        <svg class="topologia" id="topologia" viewBox="0 0 700 300" role="img" aria-label="Diagrama de la arquitectura: interfaz, pedidos, usuarios, productos y base de datos">
+          <path class="arista" id="e-ip" d="M152 150 L200 150"/>
+          <path class="arista" id="e-pu" d="M332 140 C 362 140, 360 60, 390 60"/>
+          <path class="arista" id="e-pp" d="M332 160 C 362 160, 360 240, 390 240"/>
+          <path class="arista" id="e-ub" d="M522 60 C 542 60, 536 140, 556 140"/>
+          <path class="arista" id="e-qb" d="M522 240 C 542 240, 536 160, 556 160"/>
+          <path class="arista" id="e-pb" d="M266 182 C 266 292, 618 292, 618 182"/>
+          <g class="nodo" id="n-interfaz" style="--c: var(--interfaz)" transform="translate(20 118)">
+            <rect class="caja" width="132" height="64" rx="14"/><rect class="franja" x="14" y="15" width="5" height="16" rx="2.5"/>
+            <text class="nombre" x="27" y="28">Interfaz</text>
+            <text class="cuenta" x="16" y="50" id="t-entrada">entrada</text><text class="puerto" x="120" y="50" text-anchor="end">:8080</text>
+          </g>
+          <g class="nodo" id="n-pedidos" style="--c: var(--pedidos)" transform="translate(200 118)">
+            <rect class="caja" width="132" height="64" rx="14"/><rect class="franja" x="14" y="15" width="5" height="16" rx="2.5"/>
+            <text class="nombre" x="27" y="28">Pedidos</text>
+            <g class="puntos"></g><text class="cuenta" x="82" y="50" text-anchor="end"></text><text class="puerto" x="120" y="50" text-anchor="end">:8000</text>
+          </g>
+          <g class="nodo" id="n-usuarios" style="--c: var(--usuarios)" transform="translate(390 28)">
+            <rect class="caja" width="132" height="64" rx="14"/><rect class="franja" x="14" y="15" width="5" height="16" rx="2.5"/>
+            <text class="nombre" x="27" y="28">Usuarios</text>
+            <g class="puntos"></g><text class="cuenta" x="82" y="50" text-anchor="end"></text><text class="puerto" x="120" y="50" text-anchor="end">:8001</text>
+          </g>
+          <g class="nodo" id="n-productos" style="--c: var(--productos)" transform="translate(390 208)">
+            <rect class="caja" width="132" height="64" rx="14"/><rect class="franja" x="14" y="15" width="5" height="16" rx="2.5"/>
+            <text class="nombre" x="27" y="28">Productos</text>
+            <g class="puntos"></g><text class="cuenta" x="82" y="50" text-anchor="end"></text><text class="puerto" x="120" y="50" text-anchor="end">:8002</text>
+          </g>
+          <g class="nodo" id="n-bd" style="--c: var(--bd)" transform="translate(556 118)">
+            <rect class="caja" width="124" height="64" rx="14"/><rect class="franja" x="14" y="15" width="5" height="16" rx="2.5"/>
+            <text class="nombre" x="27" y="28">rqlite</text>
+            <g class="puntos"></g><text class="cuenta" x="80" y="50" text-anchor="end"></text><text class="puerto" x="115" y="50" text-anchor="end">:4001</text>
+          </g>
+        </svg>
+      </div>
+      <div class="replicas" id="servicios"></div>
+      <p class="pie-arquitectura" id="pie-arquitectura">La réplica que atiende cada petición de esta página se resalta con el color de su servicio.</p>
+    </section>
 
-  <section class="seccion">
-    <div class="cabeza">
-      <div class="etiqueta-mono">02</div>
-      <h2>Crear un pedido</h2>
-      <p>Envía <code>POST /pedidos</code>. Pedidos verifica al usuario y pide a productos que descuente las existencias antes de aceptar la compra.</p>
-      <p>Cada pedido aceptado descuenta su cantidad del inventario.</p>
-      <p>Puede escribir IDs que no existen para probar los errores.</p>
-    </div>
-    <div class="columnas">
-      <div>
-        <form id="formulario">
-          <label><span class="etiqueta-mono">Usuario</span><input id="usuario" list="lista-usuarios" value="U01" autocomplete="off"></label>
-          <label><span class="etiqueta-mono">Producto</span><input id="producto" list="lista-productos" value="P01" autocomplete="off"></label>
-          <label><span class="etiqueta-mono">Cantidad</span><input id="cantidad" type="number" value="2"></label>
-          <button class="primario" type="submit">Enviar pedido</button>
-        </form>
-        <datalist id="lista-usuarios"></datalist>
-        <datalist id="lista-productos"></datalist>
-        <ol class="recorrido" id="recorrido"></ol>
-        <p class="nota">Recorrido deducido de la respuesta. La evidencia directa está en <code>docker compose logs pedidos</code>.</p>
+    <!-- Ventas -->
+    <section class="bloque b-ventas">
+      <div class="rotulo">Ventas registradas</div>
+      <div class="cifra" id="kpi-ingresos">—</div>
+      <div class="nota" id="kpi-nota">Leídas de la base de datos distribuida</div>
+      <svg class="curva" viewBox="0 0 300 80" preserveAspectRatio="none" aria-hidden="true">
+        <defs><linearGradient id="degradado-oro" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" stop-color="#ffc94d" stop-opacity=".35"/><stop offset="1" stop-color="#ffc94d" stop-opacity="0"/></linearGradient></defs>
+        <path class="area" id="curva-area" d=""/><path class="linea" id="curva-linea" d=""/>
+      </svg>
+      <div class="trio">
+        <div><b id="kpi-pedidos">—</b><span>pedidos</span></div>
+        <div><b id="kpi-unidades">—</b><span>unidades</span></div>
+        <div class="agotados"><b id="kpi-agotados">—</b><span>agotados</span></div>
       </div>
-      <div>
-        <div class="etiqueta-mono subtitulo">Respuesta</div>
-        <div id="respuesta"><div class="vacio">Aún no se ha enviado ninguna solicitud.</div></div>
-      </div>
-    </div>
-  </section>
+    </section>
 
-  <section class="seccion">
-    <div class="cabeza">
-      <div class="etiqueta-mono">03</div>
-      <h2>Pruebas del laboratorio</h2>
-      <p>Casos de los pasos 4 a 6 de la guía y las validaciones adicionales.</p>
-      <p>Haga clic en una fila para ejecutar solo ese caso.</p>
-      <p>Los casos usan los datos iniciales (U01, U03, P01, P03). Cada compra válida descuenta 2 unidades de P01: si se agotan, repóngalas en la sección 04.</p>
-    </div>
-    <div>
-      <div class="barra">
-        <span class="etiqueta-mono" id="resultado-pruebas">Sin ejecutar</span>
-        <button class="primario" id="ejecutar-todas">Ejecutar todas</button>
+    <!-- Base de datos -->
+    <section class="bloque b-bd suave">
+      <div class="bloque-cabeza"><div><h3>Base de datos · Raft</h3><p>Tres copias; un líder ordena las escrituras.</p></div></div>
+      <div class="raft">
+        <svg viewBox="0 0 150 130" id="raft" aria-label="Nodos de la base de datos"></svg>
+        <div>
+          <div class="raft-estado" id="raft-estado">—</div>
+          <ul class="raft-lista" id="raft-lista"></ul>
+          <div class="tramos" id="tramos"></div>
+          <div class="mayoria-texto" id="mayoria-texto"></div>
+        </div>
       </div>
-      <div class="tabla">
-        <table>
-          <thead><tr><th>Caso</th><th>Usuario</th><th>Producto</th><th class="num">Cant.</th><th>Esperado</th><th>Obtenido</th><th>Mensaje</th></tr></thead>
-          <tbody id="pruebas"></tbody>
-        </table>
+    </section>
+
+    <!-- Inventario -->
+    <section class="bloque b-inventario suave">
+      <div class="bloque-cabeza"><div><h3>Inventario</h3><p>Existencias en tiempo real; bajan con cada pedido aceptado.</p></div><span class="rotulo" id="kpi-productos"></span></div>
+      <ul class="inventario" id="inventario"><li class="tenue">Cargando…</li></ul>
+    </section>
+
+    <!-- Reparto -->
+    <section class="bloque b-reparto suave">
+      <div class="bloque-cabeza"><div><h3>¿Quién atendió?</h3><p>Pedidos procesados por cada réplica de pedidos.</p></div></div>
+      <div class="reparto">
+        <svg class="dona" viewBox="0 0 130 130" id="dona" aria-hidden="true"></svg>
+        <ul class="leyenda" id="reparto-leyenda"><li class="tenue">Todavía no hay pedidos.</li></ul>
+      </div>
+    </section>
+
+    <!-- Mesa de trabajo -->
+    <section class="bloque b-mesa">
+      <div class="mesa-cabeza">
+        <h2>Mesa de trabajo</h2>
+        <div class="segmentos" role="tablist">
+          <button role="tab" data-panel="pedido" aria-selected="true">Nuevo pedido</button>
+          <button role="tab" data-panel="pruebas" aria-selected="false">Pruebas del laboratorio</button>
+          <button role="tab" data-panel="concurrencia" aria-selected="false">Concurrencia</button>
+          <button role="tab" data-panel="gestion" aria-selected="false">Usuarios y productos</button>
+        </div>
       </div>
 
-      <div class="bloque">
-        <div class="etiqueta-mono subtitulo">Prueba de concurrencia</div>
-        <p class="nota" style="margin:0 0 12px">Envía muchos pedidos al mismo tiempo (usuario U01) sobre un producto.
-          Como productos verifica y descuenta en una sola transacción de la base de datos, aunque las compras lleguen a réplicas distintas se aceptan solo las unidades que hay y el inventario nunca queda negativo.</p>
-        <form class="crud concurrencia" id="form-concurrencia">
-          <label><span class="etiqueta-mono">Producto</span><input name="producto" list="lista-productos" value="P02" autocomplete="off"></label>
-          <label><span class="etiqueta-mono">Pedidos simultáneos</span><input name="total" type="number" min="1" max="100" value="20"></label>
-          <label><span class="etiqueta-mono">Cantidad c/u</span><input name="cantidad" type="number" min="1" value="1"></label>
-          <button class="primario" type="submit">Lanzar</button>
-        </form>
-        <div class="resultado-crud" id="resultado-concurrencia"></div>
-      </div>
-    </div>
-  </section>
-
-  <section class="seccion">
-    <div class="cabeza">
-      <div class="etiqueta-mono">04</div>
-      <h2>Gestión de usuarios y productos</h2>
-      <p>Crear, consultar, modificar y eliminar. Cada botón muestra el método HTTP que envía al servicio.</p>
-      <p>Haga clic en una fila para cargarla en el formulario. El ID lo asigna el servicio al crear.</p>
-      <p>Los cambios se guardan en la base de datos distribuida: no se pierden al reiniciar y todas las réplicas los ven.</p>
-    </div>
-    <div class="columnas">
-      <div>
-        <div class="etiqueta-mono subtitulo">Usuarios · servicio de usuarios</div>
-        <form class="crud usuarios" data-servicio="usuarios">
-          <label><span class="etiqueta-mono">ID</span><input name="id" placeholder="U01" autocomplete="off"></label>
-          <label><span class="etiqueta-mono">Nombre</span><input name="nombre" autocomplete="off"></label>
-          <label><span class="etiqueta-mono">Estado</span>
-            <select name="estado"><option value="activo">activo</option><option value="inactivo">inactivo</option></select></label>
-          <div class="acciones">
-            <button class="primario" type="submit" data-accion="crear">Crear<span class="metodo">POST</span></button>
-            <button type="button" data-accion="consultar">Consultar<span class="metodo">GET</span></button>
-            <button type="button" data-accion="modificar">Modificar<span class="metodo">PUT</span></button>
-            <button type="button" data-accion="eliminar">Eliminar<span class="metodo">DELETE</span></button>
-            <button type="button" data-accion="limpiar">Limpiar</button>
+      <div class="panel" id="panel-pedido" role="tabpanel">
+        <div class="panel-intro">
+          <p>Envía <code>POST /pedidos</code>. Pedidos verifica al usuario y pide a productos que descuente las existencias; si todo sale bien, guarda el pedido en la base de datos. Puede escribir IDs que no existen para ver los errores.</p>
+        </div>
+        <div class="dos">
+          <div>
+            <form id="formulario">
+              <label><span>Usuario</span><input id="usuario" list="lista-usuarios" value="U01" autocomplete="off"></label>
+              <label><span>Producto</span><input id="producto" list="lista-productos" value="P01" autocomplete="off"></label>
+              <label><span>Cantidad</span><input id="cantidad" type="number" value="2"></label>
+              <button class="primario" type="submit">Enviar pedido</button>
+            </form>
+            <datalist id="lista-usuarios"></datalist>
+            <datalist id="lista-productos"></datalist>
+            <ol class="recorrido" id="recorrido"></ol>
+            <p class="nota">Recorrido deducido de la respuesta. La evidencia directa está en <code>docker compose logs pedidos</code>.</p>
           </div>
-        </form>
-        <div class="resultado-crud" id="resultado-usuarios"></div>
-        <div class="tabla"><table>
-          <thead><tr><th>ID</th><th>Nombre</th><th>Estado</th></tr></thead>
-          <tbody id="usuarios"></tbody>
-        </table></div>
-      </div>
-      <div>
-        <div class="etiqueta-mono subtitulo">Productos · servicio de productos</div>
-        <form class="crud productos" data-servicio="productos">
-          <label><span class="etiqueta-mono">ID</span><input name="id" placeholder="P01" autocomplete="off"></label>
-          <label><span class="etiqueta-mono">Nombre</span><input name="nombre" autocomplete="off"></label>
-          <label><span class="etiqueta-mono">Precio</span><input name="precio" type="number" min="1" step="1"></label>
-          <label><span class="etiqueta-mono">Existencias</span><input name="existencias" type="number" min="0" step="1"></label>
-          <div class="acciones">
-            <button class="primario" type="submit" data-accion="crear">Crear<span class="metodo">POST</span></button>
-            <button type="button" data-accion="consultar">Consultar<span class="metodo">GET</span></button>
-            <button type="button" data-accion="modificar">Modificar<span class="metodo">PUT</span></button>
-            <button type="button" data-accion="eliminar">Eliminar<span class="metodo">DELETE</span></button>
-            <button type="button" data-accion="limpiar">Limpiar</button>
+          <div>
+            <div class="rotulo subtitulo">Respuesta</div>
+            <div id="respuesta"><div class="vacio">Aún no se ha enviado ninguna solicitud.</div></div>
           </div>
+        </div>
+      </div>
+
+      <div class="panel" id="panel-pruebas" role="tabpanel" hidden>
+        <div class="panel-intro">
+          <p>Casos de los pasos 4 a 6 de la guía. Haga clic en una fila para ejecutar solo ese caso. Cada compra válida descuenta 2 unidades de P01: si se agotan, repóngalas en "Usuarios y productos".</p>
+          <div class="barra-acciones">
+            <span class="resultado-pruebas" id="resultado-pruebas">Sin ejecutar</span>
+            <button class="primario" id="ejecutar-todas">Ejecutar las 7 pruebas</button>
+          </div>
+        </div>
+        <div class="tabla">
+          <table>
+            <thead><tr><th>Caso</th><th>Usuario</th><th>Producto</th><th class="num">Cant.</th><th>Esperado</th><th>Obtenido</th><th>Mensaje</th></tr></thead>
+            <tbody id="pruebas"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel" id="panel-concurrencia" role="tabpanel" hidden>
+        <div class="panel-intro">
+          <p>Lanza muchos pedidos al mismo tiempo (usuario U01) sobre un producto. Productos verifica y descuenta en una sola transacción de la base de datos: aunque las compras lleguen a réplicas distintas, solo se aceptan las unidades que hay y el inventario nunca queda negativo.</p>
+        </div>
+        <form class="form-conc" id="form-concurrencia">
+          <label><span>Producto</span><input name="producto" list="lista-productos" value="P02" autocomplete="off"></label>
+          <label><span>Pedidos simultáneos</span><input name="total" type="number" min="1" max="100" value="20"></label>
+          <label><span>Cantidad c/u</span><input name="cantidad" type="number" min="1" value="1"></label>
+          <button class="primario" type="submit">Lanzar ráfaga</button>
         </form>
-        <div class="resultado-crud" id="resultado-productos"></div>
-        <div class="tabla"><table>
-          <thead><tr><th>ID</th><th>Nombre</th><th class="num">Precio</th><th class="num">Existencias</th></tr></thead>
-          <tbody id="productos"></tbody>
-        </table></div>
+        <div class="conc-resultado" id="resultado-concurrencia"></div>
       </div>
-    </div>
-  </section>
 
-  <section class="seccion">
-    <div class="cabeza">
-      <div class="etiqueta-mono">05</div>
-      <h2>Pedidos registrados</h2>
-      <p>Se guardan en la base de datos distribuida. La columna "Atendió" muestra qué réplica de pedidos procesó cada compra.</p>
-      <button id="recargar">Recargar datos</button>
-    </div>
-    <div class="tabla"><table>
-      <thead><tr><th>ID</th><th>Usuario</th><th>Producto</th><th class="num">Cant.</th><th class="num">Precio unit.</th><th class="num">Total</th><th>Atendió</th><th>Fecha UTC</th></tr></thead>
-      <tbody id="pedidos"></tbody>
-    </table></div>
-  </section>
-
-  <section class="seccion">
-    <div class="cabeza">
-      <div class="etiqueta-mono">06</div>
-      <h2>Registro de solicitudes</h2>
-      <p>Cada petición que hizo esta página, con la dirección real del servicio que la atendió: nombre de contenedor o IP del computador.</p>
-    </div>
-    <div>
-      <div class="barra">
-        <span class="etiqueta-mono" id="total-registro">0 solicitudes</span>
-        <button id="limpiar-registro">Limpiar registro</button>
+      <div class="panel gestion" id="panel-gestion" role="tabpanel" hidden>
+        <div class="panel-intro">
+          <p>Crear, consultar, modificar y eliminar. Cada botón muestra el método HTTP que envía. Haga clic en una fila para cargarla en el formulario; el ID lo asigna el servicio al crear. Todo queda guardado en la base de datos distribuida.</p>
+        </div>
+        <div class="dos">
+          <div>
+            <div class="gestion-titulo"><i style="--c: var(--usuarios)"></i><h4>Usuarios</h4><small>servicio de usuarios · :8001</small></div>
+            <form class="crud usuarios" data-servicio="usuarios">
+              <label><span>ID</span><input name="id" placeholder="U01" autocomplete="off"></label>
+              <label><span>Nombre</span><input name="nombre" autocomplete="off"></label>
+              <label><span>Estado</span>
+                <select name="estado"><option value="activo">activo</option><option value="inactivo">inactivo</option></select></label>
+              <div class="acciones">
+                <button class="primario" type="submit" data-accion="crear">Crear<span class="metodo">POST</span></button>
+                <button type="button" data-accion="consultar">Consultar<span class="metodo">GET</span></button>
+                <button type="button" data-accion="modificar">Modificar<span class="metodo">PUT</span></button>
+                <button type="button" class="peligro" data-accion="eliminar">Eliminar<span class="metodo">DELETE</span></button>
+                <button type="button" data-accion="limpiar">Limpiar</button>
+              </div>
+            </form>
+            <div class="resultado-crud" id="resultado-usuarios"></div>
+            <div class="tabla"><table>
+              <thead><tr><th>ID</th><th>Nombre</th><th>Estado</th></tr></thead>
+              <tbody id="usuarios"></tbody>
+            </table></div>
+          </div>
+          <div>
+            <div class="gestion-titulo"><i style="--c: var(--productos)"></i><h4>Productos</h4><small>servicio de productos · :8002</small></div>
+            <form class="crud productos" data-servicio="productos">
+              <label><span>ID</span><input name="id" placeholder="P01" autocomplete="off"></label>
+              <label><span>Nombre</span><input name="nombre" autocomplete="off"></label>
+              <label><span>Precio</span><input name="precio" type="number" min="1" step="1"></label>
+              <label><span>Existencias</span><input name="existencias" type="number" min="0" step="1"></label>
+              <div class="acciones">
+                <button class="primario" type="submit" data-accion="crear">Crear<span class="metodo">POST</span></button>
+                <button type="button" data-accion="consultar">Consultar<span class="metodo">GET</span></button>
+                <button type="button" data-accion="modificar">Modificar<span class="metodo">PUT</span></button>
+                <button type="button" class="peligro" data-accion="eliminar">Eliminar<span class="metodo">DELETE</span></button>
+                <button type="button" data-accion="limpiar">Limpiar</button>
+              </div>
+            </form>
+            <div class="resultado-crud" id="resultado-productos"></div>
+            <div class="tabla"><table>
+              <thead><tr><th>ID</th><th>Nombre</th><th class="num">Precio</th><th class="num">Existencias</th></tr></thead>
+              <tbody id="productos"></tbody>
+            </table></div>
+          </div>
+        </div>
       </div>
-      <div class="tabla desplazable"><table class="registro">
-        <thead><tr><th>Hora</th><th>Método</th><th>Destino</th><th>Código</th><th class="num">Tiempo</th></tr></thead>
-        <tbody id="registro"><tr><td colspan="5" class="vacio">Sin solicitudes todavía.</td></tr></tbody>
+    </section>
+
+    <!-- Pedidos registrados -->
+    <section class="bloque b-pedidos">
+      <div class="bloque-cabeza">
+        <div><h3>Pedidos registrados</h3><p>Guardados en la base de datos distribuida. "Atendió" indica qué réplica de pedidos procesó cada compra.</p></div>
+        <button id="recargar">Recargar datos</button>
+      </div>
+      <div class="tabla"><table>
+        <thead><tr><th>ID</th><th>Usuario</th><th>Producto</th><th class="num">Cant.</th><th class="num">Precio unit.</th><th class="num">Total</th><th>Atendió</th><th>Fecha UTC</th></tr></thead>
+        <tbody id="pedidos"></tbody>
       </table></div>
-    </div>
-  </section>
+    </section>
 
-  <footer>Interfaz web en el puerto 8080 · reenvía cada petición a la primera réplica que responda de pedidos (8000), usuarios (8001) y productos (8002) · base de datos rqlite (4001).</footer>
+    <!-- Registro -->
+    <section class="bloque b-registro">
+      <div class="bloque-cabeza">
+        <div><h3>Registro de solicitudes</h3><p>Cada petición de esta página y la dirección real que la atendió: contenedor o IP del computador.</p></div>
+        <button id="limpiar-registro">Limpiar</button>
+      </div>
+      <div class="contador" id="total-registro">0 solicitudes</div>
+      <ul class="registro" id="registro"><li class="vacio">Sin solicitudes todavía.</li></ul>
+    </section>
+  </main>
+
+  <footer>
+    <span><i style="--c: var(--usuarios)"></i>usuarios :8001</span>
+    <span><i style="--c: var(--productos)"></i>productos :8002</span>
+    <span><i style="--c: var(--pedidos)"></i>pedidos :8000</span>
+    <span><i style="--c: var(--bd)"></i>base de datos rqlite :4001</span>
+    <span>interfaz :8080 · reenvía cada petición a la primera réplica que responda</span>
+  </footer>
 </div>
 
 <script>
-const TARJETAS = [
+const SERVICIOS_UI = [
   { id: "usuarios", nombre: "Usuarios", puerto: 8001 },
   { id: "productos", nombre: "Productos", puerto: 8002 },
   { id: "pedidos", nombre: "Pedidos", puerto: 8000 },
-  { id: "bd", nombre: "Base de datos (rqlite)", puerto: 4001 },
 ];
 const PRUEBAS = [
   { caso: "Compra válida", usuario: "U01", producto: "P01", cantidad: 2, esperado: 201 },
@@ -334,20 +598,47 @@ const PRUEBAS = [
   { caso: "Producto inexistente", usuario: "U01", producto: "P99", cantidad: 1, esperado: 404 },
   { caso: "Producto agotado", usuario: "U01", producto: "P03", cantidad: 1, esperado: 409 },
 ];
+// [título, detalle, servicio que hace el paso (da el color)]
 const PASOS = [
-  ["Servicio de pedidos", "Recibe la solicitud POST /pedidos"],
-  ["Validación de datos", "usuario_id, producto_id y cantidad entera mayor que cero"],
-  ["Servicio de usuarios", "GET /usuarios/{id}: debe existir y estar activo"],
-  ["Servicio de productos", "POST /productos/{id}/descontar: verifica y descuenta las existencias en un solo paso atómico"],
-  ["Pedido creado", "Se calcula el total y se guarda en la base de datos con un ID único"],
+  ["Servicio de pedidos", "Recibe la solicitud POST /pedidos", "pedidos"],
+  ["Validación de datos", "usuario_id, producto_id y cantidad entera mayor que cero", "pedidos"],
+  ["Servicio de usuarios", "GET /usuarios/{id}: debe existir y estar activo", "usuarios"],
+  ["Servicio de productos", "POST /productos/{id}/descontar: verifica y descuenta las existencias en un solo paso atómico", "productos"],
+  ["Pedido creado", "Se calcula el total y se guarda en la base de datos con un ID único", "bd"],
 ];
 
 const $ = (id) => document.getElementById(id);
 const pesos = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
+const enteros = new Intl.NumberFormat("es-CO");
 const escapar = (texto) => String(texto ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const codigoHtml = (codigo) => `<span class="codigo c${String(codigo || 5)[0]}">${codigo || "sin respuesta"}</span>`;
 const hora = () => new Date().toLocaleTimeString("es-CO", { hour12: false });
 const sinEsquema = (url) => String(url).replace(/^https?:\/\//, "");
+const idHtml = (id, tipo) => `<span class="id ${tipo}">${escapar(id)}</span>`;
+const color = (nombre) => getComputedStyle(document.documentElement).getPropertyValue(`--${nombre}`).trim();
+
+/* Tema claro / oscuro */
+let ultimosPedidos = null;
+$("tema").addEventListener("click", () => {
+  const tema = document.documentElement.dataset.tema === "oscuro" ? "claro" : "oscuro";
+  document.documentElement.dataset.tema = tema;
+  try { localStorage.setItem("tema", tema); } catch {}
+  if (ultimosPedidos) dibujarReparto(ultimosPedidos);   // la dona usa colores calculados
+});
+
+/* Pestañas de la mesa de trabajo */
+const pestanas = document.querySelectorAll("[role=tab]");
+function abrirPestana(nombre) {
+  if (!$(`panel-${nombre}`)) nombre = "pedido";
+  pestanas.forEach((p) => {
+    const elegida = p.dataset.panel === nombre;
+    p.setAttribute("aria-selected", elegida);
+    $(`panel-${p.dataset.panel}`).hidden = !elegida;
+  });
+  try { localStorage.setItem("pestana", nombre); } catch {}
+}
+pestanas.forEach((p) => p.addEventListener("click", () => abrirPestana(p.dataset.panel)));
+try { abrirPestana(localStorage.getItem("pestana") || "pedido"); } catch { abrirPestana("pedido"); }
 
 /* Entradas: la página puede hablar con la interfaz de cualquier computador.
    Si la suya deja de responder, cambia sola a la siguiente y sigue funcionando. */
@@ -370,9 +661,29 @@ async function pedir(ruta, opciones) {
 function mostrarEntrada() {
   const nombre = sinEsquema(entradas[actual] || location.origin);
   $("entrada").innerHTML = actual === 0
-    ? `entrada: ${escapar(nombre)}`
-    : `<span class="punto parcial"></span>entrada: ${escapar(nombre)} · cambió automáticamente`;
+    ? `<span class="punto arriba"></span><span>entrada: ${escapar(nombre)}</span>`
+    : `<span class="punto parcial"></span><span>entrada: ${escapar(nombre)} · cambió automáticamente</span>`;
 }
+
+/* Resaltado de la réplica y del nodo del diagrama que atendió una petición */
+let replicaServicio = {};   // url de réplica -> servicio
+const golpes = {};
+function iluminarNodo(servicio, ms = 900) {
+  const nodo = $(`n-${servicio}`);
+  if (!nodo) return;
+  nodo.classList.add("golpe");
+  setTimeout(() => nodo.classList.remove("golpe"), ms);
+}
+function marcarGolpe(servicio, destino) {
+  iluminarNodo(servicio);
+  const base = Object.keys(replicaServicio).find((url) => destino.startsWith(url));
+  if (!base) return;
+  golpes[base] = Date.now();
+  document.querySelectorAll(".replica[data-url]").forEach((el) => {
+    if (el.dataset.url === base) { el.classList.add("golpe"); setTimeout(() => el.classList.remove("golpe"), 1200); }
+  });
+}
+const recienGolpeada = (url) => Date.now() - (golpes[url] || 0) < 1200;
 
 async function llamar(servicio, ruta, opciones = {}, registrar = true) {
   const metodo = opciones.method || "GET";
@@ -388,22 +699,63 @@ async function llamar(servicio, ruta, opciones = {}, registrar = true) {
   } catch {
     datos = { error: "No responde ninguna entrada de la interfaz web (puerto 8080)." };
   }
-  if (registrar) agregarRegistro(metodo, destino, codigo, ms);
+  if (registrar) agregarRegistro(metodo, destino, codigo, ms, origen);
+  if (origen !== "interfaz") marcarGolpe(origen, destino);
   return { metodo, codigo, datos, destino, origen, ms };
 }
 
-/* 06. Registro de solicitudes */
+/* Recorrido animado de un pedido por el diagrama */
+const espera = (ms) => new Promise((r) => setTimeout(r, ms));
+async function recorrerArista(id, tinte) {
+  const camino = $(id), svg = $("topologia");
+  if (!camino || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const largo = camino.getTotalLength();
+  const bola = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+  bola.setAttribute("r", 6); bola.setAttribute("class", "paquete");
+  bola.setAttribute("fill", tinte); bola.style.color = tinte;
+  svg.appendChild(bola);
+  const duracion = Math.max(260, largo * 1.6), inicio = performance.now();
+  await new Promise((listo) => {
+    (function paso(ahora) {
+      const t = Math.min(1, (ahora - inicio) / duracion);
+      const p = camino.getPointAtLength(largo * (t < .5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2));
+      bola.setAttribute("cx", p.x); bola.setAttribute("cy", p.y);
+      t < 1 ? requestAnimationFrame(paso) : listo();
+    })(performance.now());
+  });
+  bola.remove();
+}
+async function animarPedido(pasoFallido) {
+  // pasoFallido: -1 éxito · 1 validación · 2 usuarios · 3 productos (como en mostrarRecorrido)
+  const tramos = [["e-ip", "pedidos"], ["e-pu", "usuarios"], ["e-pp", "productos"], ["e-qb", "bd"], ["e-pb", "bd"]];
+  const hasta = { "-1": tramos.length, 1: 1, 2: 2, 3: 3 }[pasoFallido] || 0;
+  for (let i = 0; i < hasta; i++) {
+    const [arista, destino] = tramos[i];
+    const fallo = pasoFallido !== -1 && i === hasta - 1;
+    await recorrerArista(arista, fallo ? color("error") : color(destino));
+    iluminarNodo(destino, 700);
+    await espera(60);
+  }
+}
+
+/* Registro de solicitudes (terminal) */
 const MAXIMO_REGISTRO = 300;
 let totalRegistro = 0;
 
-function agregarRegistro(metodo, destino, codigo, ms) {
-  const cuerpo = $("registro");
-  if (cuerpo.querySelector(".vacio")) cuerpo.innerHTML = "";
-  const fila = document.createElement("tr");
-  fila.innerHTML = `<td class="tenue">${hora()}</td><td>${metodo}</td><td>${escapar(destino)}</td>
-    <td>${codigoHtml(codigo)}</td><td class="num">${ms} ms</td>`;
-  cuerpo.prepend(fila);
-  while (cuerpo.rows.length > MAXIMO_REGISTRO) cuerpo.deleteRow(-1);
+function agregarRegistro(metodo, destino, codigo, ms, origen) {
+  const lista = $("registro");
+  if (lista.querySelector(".vacio")) lista.innerHTML = "";
+  const limpio = sinEsquema(destino);
+  const corte = limpio.indexOf("/");
+  const host = corte < 0 ? limpio : limpio.slice(0, corte), ruta = corte < 0 ? "" : limpio.slice(corte);
+  const item = document.createElement("li");
+  item.className = `s-${origen}`;
+  item.title = destino;
+  item.innerHTML = `<span class="hora">${hora()}</span><span class="verbo">${metodo}</span>
+    <span class="destino"><em>${escapar(host)}</em>${escapar(ruta)}</span>
+    <span class="fin">${codigoHtml(codigo)}<span class="ms">${ms} ms</span></span>`;
+  lista.prepend(item);
+  while (lista.children.length > MAXIMO_REGISTRO) lista.lastElementChild.remove();
   totalRegistro++;
   $("total-registro").textContent = totalRegistro > MAXIMO_REGISTRO
     ? `${totalRegistro} solicitudes · se muestran las últimas ${MAXIMO_REGISTRO}`
@@ -413,61 +765,161 @@ function agregarRegistro(metodo, destino, codigo, ms) {
 $("limpiar-registro").addEventListener("click", () => {
   totalRegistro = 0;
   $("total-registro").textContent = "0 solicitudes";
-  $("registro").innerHTML = `<tr><td colspan="5" class="vacio">Sin solicitudes todavía.</td></tr>`;
+  $("registro").innerHTML = `<li class="vacio">Sin solicitudes todavía.</li>`;
 });
 
-/* 01. Estado del clúster */
-function filaReplica(ok, direccion, detalle) {
-  return `<div class="replica ${ok ? "arriba" : "abajo"}"><span class="punto"></span>
-    <span class="dir" title="${escapar(direccion)}">${escapar(sinEsquema(direccion))}</span>
-    <span class="detalle">${detalle}</span></div>`;
+/* Estado del clúster: diagrama, réplicas y base de datos */
+const estadoClase = (activos, total, enPie) => activos === total ? "arriba" : enPie ? "parcial" : "abajo";
+
+function pintarNodo(id, estados, clase, lideres = []) {
+  const nodo = $(`n-${id}`);
+  nodo.classList.remove("arriba", "parcial", "abajo");
+  nodo.classList.add(clase);
+  nodo.querySelector(".puntos").innerHTML = estados.map((ok, i) =>
+    `<circle cx="${20 + i * 14}" cy="46" r="4.6" class="${ok ? "p-ok" : "p-mal"}${lideres[i] ? " p-lider" : ""}"/>`).join("");
+  nodo.querySelector(".cuenta").textContent = `${estados.filter(Boolean).length}/${estados.length}`;
 }
 
-function tarjeta(t, filas, activos, total, enPie) {
-  // Verde: todo responde · ámbar: algo cayó pero el servicio sigue en pie · rojo: caído.
-  const clase = activos === total ? "arriba" : enPie ? "parcial" : "abajo";
-  const unidad = t.id === "bd" ? "nodos" : "réplicas";
-  const estado = activos === total ? `${activos}/${total} ${unidad} en ejecución`
-    : enPie ? `${activos}/${total} ${unidad} · sigue en pie`
-    : t.id === "bd" ? `${activos}/${total} nodos · sin mayoría, no acepta cambios` : "sin réplicas disponibles";
-  return `<div class="servicio ${clase}">
-      <div class="nombre"><b>${t.nombre}</b><span class="etiqueta-mono">:${t.puerto}</span></div>
-      <div class="estado"><span class="punto"></span>${estado}</div>${filas}</div>`;
+function pintarRaft(nodos) {
+  const n = nodos.length || 3, centro = [75, 62], radio = 44;
+  const pos = Array.from({ length: n }, (_, i) => {
+    const a = -Math.PI / 2 + (2 * Math.PI * i) / n;
+    return [centro[0] + radio * Math.cos(a), centro[1] + radio * Math.sin(a)];
+  });
+  let enlaces = "";
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+    const roto = !(nodos[i]?.ok && nodos[j]?.ok);
+    enlaces += `<line class="enlace${roto ? " roto" : ""}" x1="${pos[i][0]}" y1="${pos[i][1]}" x2="${pos[j][0]}" y2="${pos[j][1]}"/>`;
+  }
+  const circulos = pos.map(([x, y], i) => {
+    const nd = nodos[i] || { ok: false, id: "?" };
+    return `<circle cx="${x}" cy="${y}" r="15" class="${nd.ok ? "ok" : "mal"}${nd.lider ? " lider" : ""}"><title>${escapar(nd.id)}</title></circle>
+      ${nd.lider ? `<text class="corona" x="${x}" y="${y - 21}">★</text>` : ""}
+      <text x="${x}" y="${y + 30}">${escapar(String(nd.id).replace(/^rqlite-|^nodo-/, ""))}</text>`;
+  }).join("");
+  $("raft").innerHTML = enlaces + circulos;
+}
+
+function replicaHtml(ok, url, titulo, detalle) {
+  return `<div class="replica ${ok ? "arriba" : "abajo"}${recienGolpeada(url) ? " golpe" : ""}" data-url="${escapar(url)}" title="${escapar(url)}">
+    <span class="punto"></span><b>${escapar(titulo)}</b><small>${detalle}</small></div>`;
 }
 
 async function revisarCluster() {
   let c;
   try { c = await (await pedir("/api/cluster")).json(); } catch { c = null; }
   if (!c) {
-    $("resumen").innerHTML = `<span class="punto abajo"></span>sin conexión con la interfaz · ${hora()}`;
+    $("resumen").innerHTML = `<span class="punto abajo"></span><span>sin conexión con la interfaz · ${hora()}</span>`;
     return;
   }
+  replicaServicio = {};
   let activos = 0, total = 0;
-  $("servicios").innerHTML = TARJETAS.map((t) => {
-    if (t.id === "bd") {
-      const nodos = c.bd || [];
-      const ok = nodos.filter((n) => n.ok).length;
-      const filas = nodos.map((n) => filaReplica(n.ok, n.direccion,
-        n.ok ? (n.lider ? `<span class="lider">líder</span>` : "seguidor") : "sin respuesta")).join("")
-        || `<div class="replica abajo"><span class="punto"></span>ningún nodo responde</div>`;
-      return tarjeta(t, filas, ok, nodos.length || 3, ok * 2 > (nodos.length || 3));
-    }
-    const replicas = c.servicios[t.id] || [];
+  const caido = {};
+  $("servicios").innerHTML = SERVICIOS_UI.map((s) => {
+    const replicas = c.servicios[s.id] || [];
+    replicas.forEach((r) => (replicaServicio[r.url] = s.id));
     const ok = replicas.filter((r) => r.ok).length;
     activos += ok; total += replicas.length;
-    const filas = replicas.map((r) => filaReplica(r.ok, r.url,
-      r.ok ? `${escapar(r.nodo)} · ${escapar(r.contenedor)} · ${r.ms} ms` : "sin respuesta")).join("");
-    return tarjeta(t, filas, ok, replicas.length, ok > 0);
+    caido[s.id] = ok === 0;
+    pintarNodo(s.id, replicas.map((r) => r.ok), estadoClase(ok, replicas.length, ok > 0));
+    return `<div class="grupo" style="--c: var(--${s.id})">
+      <h4><i></i>${s.nombre}<span>${ok}/${replicas.length}</span></h4>
+      ${replicas.map((r) => replicaHtml(r.ok, r.url, r.ok ? (r.nodo || sinEsquema(r.url)) : sinEsquema(r.url),
+        r.ok ? `${escapar(r.contenedor)} · ${r.ms} ms` : "sin respuesta")).join("")}</div>`;
   }).join("");
-  const lider = (c.bd || []).find((n) => n.lider);
+
+  // Base de datos
+  const nodos = c.bd || [];
+  const esperados = nodos.length || 3;
+  const okBd = nodos.filter((n) => n.ok).length;
+  const necesarios = Math.floor(esperados / 2) + 1;
+  const lider = nodos.find((n) => n.lider);
+  pintarNodo("bd", nodos.length ? nodos.map((n) => n.ok) : [false, false, false],
+    estadoClase(okBd, esperados, okBd >= necesarios), nodos.map((n) => n.lider));
+  pintarRaft(nodos);
+  $("raft-estado").textContent = okBd >= necesarios
+    ? (okBd === esperados ? `${okBd}/${esperados} nodos en línea` : `${okBd}/${esperados} nodos · sigue en pie`)
+    : "Sin mayoría";
+  $("raft-estado").style.color = okBd === esperados ? "" : okBd >= necesarios ? "var(--aviso)" : "var(--error)";
+  $("raft-lista").innerHTML = nodos.length === 0 ? `<li class="mal"><span class="punto abajo"></span>ningún nodo responde</li>`
+    : nodos.map((n) => `<li class="${n.ok ? "" : "mal"}"><span class="punto ${n.ok ? "arriba" : "abajo"}"></span>${escapar(n.id)}
+        <em>${n.ok ? (n.lider ? "líder" : "seguidor") : "sin respuesta"}</em></li>`).join("");
+  $("tramos").innerHTML = Array.from({ length: esperados }, (_, i) => `<i class="${i < okBd ? "lleno" : ""}"></i>`).join("");
+  $("mayoria-texto").textContent = `Se necesitan ${necesarios} de ${esperados} para aceptar cambios.`;
+
+  // Interfaz y conexiones: una conexión se marca cortada si su destino no está disponible
+  $("t-entrada").textContent = c.atendido_por || "entrada";
+  const bdCaida = okBd < necesarios;
+  const cortadas = {
+    "e-ip": caido.pedidos, "e-pu": caido.usuarios || caido.pedidos, "e-pp": caido.productos || caido.pedidos,
+    "e-ub": bdCaida || caido.usuarios, "e-qb": bdCaida || caido.productos, "e-pb": bdCaida || caido.pedidos,
+  };
+  Object.entries(cortadas).forEach(([id, cortada]) => $(id).classList.toggle("cortada", !!cortada));
+
   const clase = activos === total && lider ? "arriba" : activos > 0 && lider ? "parcial" : "abajo";
-  $("resumen").innerHTML = `<span class="punto ${clase}"></span>${activos}/${total} réplicas en ejecución · `
-    + `${lider ? `líder de la base: ${escapar(lider.id)}` : "base sin líder"} · ${hora()}`;
+  $("resumen").innerHTML = `<span class="punto ${clase}"></span><span>${activos}/${total} réplicas · `
+    + `${lider ? `líder: ${escapar(lider.id)}` : "base sin líder"}</span>`;
+  $("ultima-revision").textContent = `en vivo · ${hora()}`;
+  $("pie-arquitectura").innerHTML = `Esta página entra por <b>${escapar(c.atendido_por)}</b>. La réplica que atiende cada petición se resalta con el color de su servicio.`;
 }
 
-/* 04 y 05. Datos de cada servicio */
+/* Datos: tablas, ventas, inventario y reparto */
 const seleccion = { usuarios: null, productos: null };
 const filaClase = (servicio, id) => `clic${seleccion[servicio] === id ? " seleccionado" : ""}`;
+
+function dibujarVentas(pedidos) {
+  const ingresos = pedidos.reduce((s, p) => s + p.total, 0);
+  $("kpi-ingresos").textContent = pesos.format(ingresos);
+  $("kpi-pedidos").textContent = enteros.format(pedidos.length);
+  $("kpi-unidades").textContent = enteros.format(pedidos.reduce((s, p) => s + p.cantidad, 0));
+  const ultimo = pedidos[pedidos.length - 1];
+  $("kpi-nota").textContent = ultimo ? `Último: ${ultimo.id} · ${ultimo.producto.nombre} × ${ultimo.cantidad}` : "Todavía no hay pedidos";
+  // Curva de ventas acumuladas, pedido a pedido
+  let acumulado = 0;
+  const valores = [0, ...pedidos.map((p) => (acumulado += p.total))];
+  const maximo = Math.max(1, acumulado);
+  const puntos = valores.map((v, i) => [valores.length === 1 ? 300 : (i / (valores.length - 1)) * 300, 74 - (v / maximo) * 64]);
+  const linea = puntos.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
+  $("curva-linea").setAttribute("d", linea);
+  $("curva-area").setAttribute("d", `${linea} L300 80 L0 80 Z`);
+}
+
+function dibujarReparto(pedidos) {
+  ultimosPedidos = pedidos;
+  const conteo = {};
+  pedidos.forEach((p) => { const r = p.atendido_por || "sin dato"; conteo[r] = (conteo[r] || 0) + 1; });
+  const filas = Object.entries(conteo).sort((a, b) => b[1] - a[1]);
+  const tonos = ["pedidos", "usuarios", "productos", "bd", "tenue"].map(color);
+  const radio = 50, circ = 2 * Math.PI * radio;
+  let desfase = 0;
+  const arcos = filas.map(([, n], i) => {
+    const largo = (n / pedidos.length) * circ;
+    const hueco = filas.length > 1 ? 2 : 0;
+    const arco = `<circle cx="65" cy="65" r="${radio}" stroke="${tonos[i % tonos.length]}" stroke-dasharray="${Math.max(0, largo - hueco)} ${circ}"
+      stroke-dashoffset="${-desfase}" transform="rotate(-90 65 65)"/>`;
+    desfase += largo;
+    return arco;
+  }).join("");
+  $("dona").innerHTML = `<circle class="fondo-dona" cx="65" cy="65" r="${radio}"/>${arcos}
+    <text x="65" y="68">${pedidos.length}</text><text class="sub" x="65" y="84">pedidos</text>`;
+  $("reparto-leyenda").innerHTML = filas.length === 0 ? `<li class="tenue">Todavía no hay pedidos.</li>`
+    : filas.map(([r, n], i) => `<li><i style="background:${tonos[i % tonos.length]}"></i>${escapar(r)}
+        <b>${n} · ${Math.round((n / pedidos.length) * 100)}%</b></li>`).join("");
+}
+
+function dibujarInventario(productos) {
+  const maximo = Math.max(1, ...productos.map((p) => p.existencias));
+  $("kpi-agotados").textContent = productos.filter((p) => p.existencias <= 0).length;
+  $("kpi-productos").textContent = `${productos.length} productos`;
+  $("inventario").innerHTML = productos.length === 0 ? `<li class="tenue">No hay productos.</li>`
+    : productos.map((p) => {
+      const clase = p.existencias <= 0 ? "agotado" : p.existencias <= 3 ? "bajo" : "";
+      return `<li class="${clase}" title="${escapar(p.id)} · ${escapar(p.nombre)}">
+        <span class="nombre">${idHtml(p.id, "p")} ${escapar(p.nombre)}</span>
+        <span class="valor">${p.existencias > 0 ? p.existencias : "agotado"}</span>
+        <span class="barra"><i style="width:${(Math.max(0, p.existencias) / maximo) * 100}%"></i></span></li>`;
+    }).join("");
+}
 
 async function cargarDatos() {
   const [usuarios, productos, pedidos] = await Promise.all([
@@ -478,31 +930,36 @@ async function cargarDatos() {
   if (usuarios.codigo === 200) {
     if (usuarios.datos.length === 0) $("usuarios").innerHTML = `<tr><td colspan="3" class="vacio">No hay usuarios.</td></tr>`;
     else $("usuarios").innerHTML = usuarios.datos.map((u) => `<tr class="${filaClase("usuarios", u.id)}" data-id="${escapar(u.id)}">
-      <td class="mono">${escapar(u.id)}</td><td>${escapar(u.nombre)}</td>
-      <td class="${u.estado === "activo" ? "" : "alerta"}">${escapar(u.estado)}</td></tr>`).join("");
-    $("lista-usuarios").innerHTML = usuarios.datos.map((u) => `<option value="${u.id}">${escapar(u.nombre)}</option>`).join("");
+      <td>${idHtml(u.id, "u")}</td><td>${escapar(u.nombre)}</td>
+      <td><span class="estado-usuario ${u.estado === "activo" ? "" : "inactivo"}"><span class="punto"></span>${escapar(u.estado)}</span></td></tr>`).join("");
+    $("lista-usuarios").innerHTML = usuarios.datos.map((u) => `<option value="${escapar(u.id)}">${escapar(u.nombre)}</option>`).join("");
   } else $("usuarios").innerHTML = sinDatos(3, usuarios);
 
   if (productos.codigo === 200) {
     if (productos.datos.length === 0) $("productos").innerHTML = `<tr><td colspan="4" class="vacio">No hay productos.</td></tr>`;
     else $("productos").innerHTML = productos.datos.map((p) => `<tr class="${filaClase("productos", p.id)}" data-id="${escapar(p.id)}">
-      <td class="mono">${escapar(p.id)}</td><td>${escapar(p.nombre)}</td>
+      <td>${idHtml(p.id, "p")}</td><td>${escapar(p.nombre)}</td>
       <td class="num">${pesos.format(p.precio)}</td>
       <td class="num ${p.existencias > 0 ? "" : "alerta"}">${p.existencias > 0 ? p.existencias : "0 · agotado"}</td></tr>`).join("");
-    $("lista-productos").innerHTML = productos.datos.map((p) => `<option value="${p.id}">${escapar(p.nombre)}</option>`).join("");
+    $("lista-productos").innerHTML = productos.datos.map((p) => `<option value="${escapar(p.id)}">${escapar(p.nombre)}</option>`).join("");
+    dibujarInventario(productos.datos);
   } else $("productos").innerHTML = sinDatos(4, productos);
 
   if (pedidos.codigo !== 200) $("pedidos").innerHTML = sinDatos(8, pedidos);
-  else if (pedidos.datos.length === 0) $("pedidos").innerHTML = `<tr><td colspan="8" class="vacio">Todavía no hay pedidos.</td></tr>`;
-  else $("pedidos").innerHTML = pedidos.datos.slice().reverse().map((p) => `<tr><td class="mono">${p.id}</td>
-    <td>${escapar(p.usuario.nombre)} <span class="tenue">${p.usuario.id}</span></td>
-    <td>${escapar(p.producto.nombre)} <span class="tenue">${p.producto.id}</span></td>
-    <td class="num">${p.cantidad}</td><td class="num">${pesos.format(p.precio_unitario)}</td>
-    <td class="num"><b>${pesos.format(p.total)}</b></td><td class="tenue">${escapar(p.atendido_por || "")}</td>
-    <td class="mono tenue">${p.fecha_utc.replace("T", " ").slice(0, 19)}</td></tr>`).join("");
+  else {
+    $("pedidos").innerHTML = pedidos.datos.length === 0 ? `<tr><td colspan="8" class="vacio">Todavía no hay pedidos.</td></tr>`
+      : pedidos.datos.slice().reverse().map((p) => `<tr><td>${idHtml(p.id, "ped")}</td>
+        <td>${escapar(p.usuario.nombre)} <span class="tenue mono">${escapar(p.usuario.id)}</span></td>
+        <td>${escapar(p.producto.nombre)} <span class="tenue mono">${escapar(p.producto.id)}</span></td>
+        <td class="num">${p.cantidad}</td><td class="num">${pesos.format(p.precio_unitario)}</td>
+        <td class="num"><b>${pesos.format(p.total)}</b></td><td class="tenue">${escapar(p.atendido_por || "")}</td>
+        <td class="mono tenue">${escapar(p.fecha_utc.replace("T", " ").slice(0, 19))}</td></tr>`).join("");
+    dibujarVentas(pedidos.datos);
+    dibujarReparto(pedidos.datos);
+  }
 }
 
-/* 04. Gestión (CRUD): un formulario por servicio, con data-servicio="usuarios" o "productos" */
+/* Gestión (CRUD): un formulario por servicio, con data-servicio="usuarios" o "productos" */
 // Solo envía los campos con valor: al modificar (PUT) se cambian únicamente esos.
 function leerFormulario(form) {
   const datos = {};
@@ -523,7 +980,7 @@ function mostrarResultadoCrud(servicio, r, aviso) {
   const caja = $(`resultado-${servicio}`);
   if (!r) { caja.innerHTML = aviso ? `<span class="alerta">${escapar(aviso)}</span>` : ""; return; }
   const detalle = r.datos?.error || r.datos?.mensaje || JSON.stringify(r.datos);
-  caja.innerHTML = `${codigoHtml(r.codigo)}<span>${r.metodo} ${escapar(r.destino)}</span>
+  caja.innerHTML = `${codigoHtml(r.codigo)}<span>${r.metodo} ${escapar(sinEsquema(r.destino))}</span>
     <span class="detalle ${r.datos?.error ? "alerta" : ""}">${escapar(detalle)}</span>`;
 }
 
@@ -582,25 +1039,25 @@ for (const form of document.querySelectorAll(".crud[data-servicio]")) {
   });
 }
 
-/* 02. Crear pedido */
+/* Crear pedido */
 async function enviarPedido(usuario, producto, cantidad) {
   const cuerpo = JSON.stringify({ usuario_id: usuario, producto_id: producto, cantidad });
   const r = await llamar("pedidos", "pedidos", { method: "POST", headers: { "Content-Type": "application/json" }, body: cuerpo });
   mostrarRespuesta(r, cuerpo);
-  mostrarRecorrido(r);
+  animarPedido(mostrarRecorrido(r));
   return r;
 }
 
 function mostrarRespuesta(r, cuerpo) {
   $("respuesta").innerHTML = `
-    <div class="linea-respuesta">${codigoHtml(r.codigo)}<span>POST ${escapar(r.destino)}</span><span>${r.ms} ms</span></div>
+    <div class="linea-respuesta">${codigoHtml(r.codigo)}<span>POST ${escapar(sinEsquema(r.destino))}</span><span>${r.ms} ms</span></div>
     <pre>${escapar(JSON.stringify(r.datos, null, 2))}</pre>
-    <div class="etiqueta-mono subtitulo" style="margin-top:20px">Cuerpo enviado</div>
+    <div class="rotulo subtitulo" style="margin-top:20px">Cuerpo enviado</div>
     <pre>${escapar(cuerpo)}</pre>`;
 }
 
 // Deduce hasta qué paso llegó la solicitud a partir del código y el mensaje.
-// Sin respuesta (r omitido) se muestran todos los pasos como pendientes.
+// Sin respuesta (r omitido) se muestran todos los pasos como pendientes. Devuelve el paso fallido.
 function mostrarRecorrido(r) {
   const error = r?.datos?.error || "";
   let fallo = null;
@@ -609,12 +1066,13 @@ function mostrarRecorrido(r) {
   else if (r?.codigo === 400) fallo = 1;
   else if (r && /servicio de usuarios|usuario/i.test(error)) fallo = 2;
   else if (r) fallo = 3;
-  $("recorrido").innerHTML = PASOS.map(([titulo, detalle], i) => {
+  $("recorrido").innerHTML = PASOS.map(([titulo, detalle, servicio], i) => {
     let estado = "";
     if (fallo !== null) estado = fallo === -1 || i < fallo ? "ok" : i === fallo ? "fallo" : "omitido";
     const texto = estado === "fallo" ? escapar(error) : detalle;
-    return `<li class="${estado}"><b>${titulo}</b>${texto}</li>`;
+    return `<li class="${estado}" style="--c: var(--${servicio})"><b>${titulo}</b>${texto}</li>`;
   }).join("");
+  return fallo;
 }
 
 $("formulario").addEventListener("submit", async (evento) => {
@@ -627,10 +1085,10 @@ $("formulario").addEventListener("submit", async (evento) => {
   cargarDatos();
 });
 
-/* 03. Pruebas del laboratorio */
+/* Pruebas del laboratorio */
 function dibujarPruebas() {
   $("pruebas").innerHTML = PRUEBAS.map((p, i) => `<tr class="clic" data-i="${i}" title="Ejecutar este caso">
-    <td>${p.caso}</td><td class="mono">${p.usuario}</td><td class="mono">${p.producto}</td><td class="num">${p.cantidad}</td>
+    <td>${p.caso}</td><td>${idHtml(p.usuario, "u")}</td><td>${idHtml(p.producto, "p")}</td><td class="num">${p.cantidad}</td>
     <td>${codigoHtml(p.esperado)}</td><td class="obtenido tenue">—</td><td class="mensaje tenue"></td></tr>`).join("");
 }
 
@@ -643,7 +1101,7 @@ async function ejecutarPrueba(i) {
   const r = await enviarPedido(p.usuario, p.producto, p.cantidad);
   resultados[i] = r.codigo === p.esperado;
   fila.querySelector(".obtenido").innerHTML = codigoHtml(r.codigo) +
-    (resultados[i] ? ` <span class="tenue">✓</span>` : ` <span class="alerta">✕ distinto</span>`);
+    (resultados[i] ? ` <span class="c2">✓</span>` : ` <span class="alerta">✕ distinto</span>`);
   fila.querySelector(".mensaje").textContent = r.datos?.error || r.datos?.mensaje || "";
   const ejecutadas = resultados.filter((x) => x !== undefined);
   $("resultado-pruebas").textContent = `${ejecutadas.filter(Boolean).length} de ${ejecutadas.length} coinciden con lo esperado`;
@@ -663,10 +1121,11 @@ $("ejecutar-todas").addEventListener("click", async (evento) => {
   cargarDatos();
 });
 
-// Lanza todos los pedidos a la vez y comprueba: existencias antes − aceptados × cantidad = existencias después.
+/* Concurrencia: lanza todos los pedidos a la vez y comprueba
+   existencias antes − aceptados × cantidad = existencias después. */
 $("form-concurrencia").addEventListener("submit", async (evento) => {
   evento.preventDefault();
-  const form = evento.target, caja = $("resultado-concurrencia");
+  const form = evento.target, caja = $("resultado-concurrencia"), boton = evento.submitter;
   const producto = form.elements.producto.value.trim();
   const total = Math.min(Number(form.elements.total.value) || 1, 100);
   const cantidad = Number(form.elements.cantidad.value) || 1;
@@ -674,29 +1133,36 @@ $("form-concurrencia").addEventListener("submit", async (evento) => {
 
   const antes = await llamar("productos", ruta);
   if (antes.codigo !== 200) {
-    caja.innerHTML = `${codigoHtml(antes.codigo)}<span class="alerta">${escapar(antes.datos?.error || "No se pudo consultar el producto")}</span>`;
+    caja.innerHTML = `<p class="veredicto">${codigoHtml(antes.codigo)} <span class="alerta">${escapar(antes.datos?.error || "No se pudo consultar el producto")}</span></p>`;
     return;
   }
-  evento.submitter.disabled = true;
-  caja.innerHTML = `<span>Enviando ${total} pedidos simultáneos…</span>`;
+  boton.disabled = true;
+  caja.innerHTML = `<div class="rafaga">${"<i></i>".repeat(total)}</div><p class="veredicto">Enviando ${total} pedidos simultáneos…</p>`;
+  const cuadros = caja.querySelectorAll(".rafaga i");
   const cuerpo = JSON.stringify({ usuario_id: "U01", producto_id: producto, cantidad });
-  const respuestas = await Promise.all(Array.from({ length: total }, () =>
-    llamar("pedidos", "pedidos", { method: "POST", headers: { "Content-Type": "application/json" }, body: cuerpo })));
+  // Cada círculo se pinta cuando llega su respuesta: verde aceptado, ámbar rechazado.
+  const respuestas = await Promise.all(Array.from({ length: total }, (_, i) =>
+    llamar("pedidos", "pedidos", { method: "POST", headers: { "Content-Type": "application/json" }, body: cuerpo })
+      .then((r) => { cuadros[i].className = `c${String(r.codigo || 5)[0]}`; cuadros[i].title = `${r.codigo} ${r.datos?.error || ""}`; return r; })));
   const despues = await llamar("productos", ruta);
-  evento.submitter.disabled = false;
+  boton.disabled = false;
 
   const aceptados = respuestas.filter((r) => r.codigo === 201).length;
   const rechazados = respuestas.filter((r) => r.codigo === 409).length;
   const otros = total - aceptados - rechazados;
   const inicial = antes.datos.existencias, final = despues.datos?.existencias;
   const consistente = final === inicial - aceptados * cantidad && final >= 0;
-  caja.innerHTML = `<span>Existencias antes: <b>${inicial}</b></span>
-    <span>${codigoHtml(201)} ${aceptados} aceptados</span><span>${codigoHtml(409)} ${rechazados} rechazados</span>
-    ${otros ? `<span class="alerta">${otros} con otro código</span>` : ""}
-    <span>Después: <b>${final ?? "—"}</b></span>
-    <span class="${consistente ? "" : "alerta"}">${consistente
-      ? `✓ consistente: ${inicial} − ${aceptados} × ${cantidad} = ${final}`
-      : "✕ el inventario no coincide con los pedidos aceptados"}</span>`;
+  caja.innerHTML = `<div class="conc-cifras">
+      <div><span>Existencias antes</span><b>${inicial}</b></div>
+      <div class="ok"><span>Aceptados · 201</span><b>${aceptados}</b></div>
+      <div class="rech"><span>Rechazados · 409</span><b>${rechazados}</b></div>
+      <div><span>Existencias después</span><b>${final ?? "—"}</b></div>
+    </div>
+    <div class="rafaga">${respuestas.map((r) => `<i class="c${String(r.codigo || 5)[0]}" title="${r.codigo}"></i>`).join("")}</div>
+    ${otros ? `<p class="veredicto alerta">${otros} con otro código</p>` : ""}
+    <p class="veredicto ${consistente ? "bien" : "alerta"}">${consistente
+      ? `✓ Consistente: ${inicial} − ${aceptados} × ${cantidad} = ${final}`
+      : "✕ El inventario no coincide con los pedidos aceptados"}</p>`;
   cargarDatos();
 });
 
@@ -712,7 +1178,7 @@ $("recargar").addEventListener("click", cargarDatos);
   mostrarEntrada();
   dibujarPruebas();
   mostrarRecorrido();
-  revisarCluster();
+  await revisarCluster();
   cargarDatos();
   setInterval(revisarCluster, 3000);
 })();
