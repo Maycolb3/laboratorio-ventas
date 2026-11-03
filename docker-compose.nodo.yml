@@ -1,0 +1,70 @@
+# Un nodo del sistema distribuido. Los TRES computadores usan este mismo
+# archivo; lo único que cambia es el .env de cada uno (ver .env.ejemplo).
+# Cada computador corre un nodo de la base de datos y una réplica de cada
+# servicio, así que si uno se apaga los otros dos siguen atendiendo.
+# Uso: docker compose -f docker-compose.nodo.yml up -d --build
+name: ventas-nodo
+
+# Cada servicio usa primero la réplica de su propio computador y, si no
+# responde, las de los otros dos (por su IP de Tailscale).
+x-entorno: &entorno
+  NODO: ${NODO:?Falta NODO en el archivo .env (A, B o C)}
+  DB_URLS: http://rqlite:4001,http://${IP_OTRO_1}:4001,http://${IP_OTRO_2}:4001
+  USUARIOS_URLS: http://usuarios:8001,http://${IP_OTRO_1}:8001,http://${IP_OTRO_2}:8001
+  PRODUCTOS_URLS: http://productos:8002,http://${IP_OTRO_1}:8002,http://${IP_OTRO_2}:8002
+  PEDIDOS_URLS: http://pedidos:8000,http://${IP_OTRO_1}:8000,http://${IP_OTRO_2}:8000
+
+x-servicio: &servicio
+  restart: unless-stopped
+  depends_on: [rqlite]
+
+services:
+  rqlite:
+    image: rqlite/rqlite:10.6.0
+    container_name: bd
+    # La primera vez, la base espera a los tres nodos y elige un líder.
+    # Después basta con que estén dos de tres.
+    command: -bootstrap-expect 3 -join ${MI_IP:?Falta MI_IP en el archivo .env}:4002,${IP_OTRO_1:?Falta IP_OTRO_1 en el archivo .env}:4002,${IP_OTRO_2:?Falta IP_OTRO_2 en el archivo .env}:4002
+    environment:
+      NODE_ID: nodo-${NODO}
+      HTTP_ADV_ADDR: ${MI_IP}:4001   # dirección con la que lo encuentran los otros nodos
+      RAFT_ADV_ADDR: ${MI_IP}:4002
+    ports:
+      - "4001:4001"   # consultas de los servicios
+      - "4002:4002"   # replicación entre nodos (Raft)
+    volumes:
+      - datos:/rqlite/file   # los datos quedan en disco: sobreviven a reinicios
+    restart: unless-stopped
+
+  usuarios:
+    <<: *servicio
+    build: {context: ., dockerfile: usuarios/Dockerfile}
+    container_name: servicio-usuarios
+    ports: ["8001:8001"]
+    environment: *entorno
+
+  productos:
+    <<: *servicio
+    build: {context: ., dockerfile: productos/Dockerfile}
+    container_name: servicio-productos
+    ports: ["8002:8002"]
+    environment: *entorno
+
+  pedidos:
+    <<: *servicio
+    build: {context: ., dockerfile: pedidos/Dockerfile}
+    container_name: servicio-pedidos
+    ports: ["8000:8000"]
+    environment: *entorno
+
+  interfaz:
+    <<: *servicio
+    build: {context: ., dockerfile: interfaz/Dockerfile}
+    container_name: servicio-interfaz
+    ports: ["8080:8080"]   # se publica con: tailscale funnel --bg 8080
+    environment:
+      <<: *entorno
+      ENTRADAS: ${ENTRADAS:-}
+
+volumes:
+  datos:

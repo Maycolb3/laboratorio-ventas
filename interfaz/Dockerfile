@@ -7,12 +7,14 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# Primero se instalan las dependencias para aprovechar la caché de capas.
-COPY requirements.txt .
+# Se construye desde la raíz del repositorio para poder copiar el código
+# compartido (carpeta comun). Primero las dependencias, para aprovechar la
+# caché de capas.
+COPY interfaz/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py .
-COPY static/ static/
+COPY comun/replicas.py interfaz/app.py ./
+COPY interfaz/static/ static/
 
 # Puerto en el que escucha la interfaz web dentro del contenedor.
 EXPOSE 8080

@@ -1,6 +1,6 @@
 # Laboratorio: sistema de ventas distribuido con Docker
 
-Tres servicios Flask independientes (usuarios, productos y pedidos), cada uno en su propio contenedor, conectados por una red interna de Docker y comunicados mediante HTTP y JSON. Una interfaz web (puerto 8080) permite ver el estado de los servicios, sus datos y ejecutar las pruebas desde el navegador.
+Tres servicios Flask independientes (usuarios, productos y pedidos), cada uno en su propio contenedor, comunicados mediante HTTP y JSON. Los datos se guardan en **rqlite**, una base de datos distribuida que copia la información en tres nodos. De cada servicio hay varias réplicas: si un contenedor o un computador se cae, el sistema sigue funcionando con los demás. Una interfaz web (puerto 8080) muestra el estado del clúster, los datos y permite ejecutar las pruebas.
 
 ## Trabajo en equipo con Git
 
@@ -11,7 +11,7 @@ Todos los integrantes trabajan sobre este mismo repositorio. Cada uno modifica s
 | 1 | `usuarios/app.py`, `usuarios/requirements.txt` |
 | 2 | `productos/app.py`, `productos/requirements.txt` |
 | 3 | `pedidos/app.py`, `pedidos/requirements.txt` |
-| 4 | Los tres `Dockerfile` y `docker-compose.yml` |
+| 4 | Los `Dockerfile`, `docker-compose.yml`, `docker-compose.nodo.yml` y la carpeta `comun` |
 | 5 | Revisión, pruebas y evidencias |
 
 Clonar el repositorio (una sola vez):
@@ -39,70 +39,104 @@ Después de cada `git pull` que traiga cambios en el código, reconstruir los co
 
 ## Arquitectura
 
+En el despliegue real, **los tres computadores son iguales**: cada uno corre un nodo de la base de datos y una réplica de cada servicio. Cada servicio usa primero la réplica de su propio computador y, si no responde, la de otro.
+
 ```mermaid
 flowchart LR
-    C["Cliente de pruebas<br/>PowerShell / Postman / curl"] -- "POST /pedidos<br/>localhost:8000" --> PED
-    N["Navegador"] -- "localhost:8080" --> INT
-    subgraph RED["Red Docker: red_ventas"]
-        INT["servicio-interfaz<br/>:8080"]
-        INT -- "/salud, consultas<br/>y POST /pedidos" --> PED
-        INT -.-> USU
-        INT -.-> PRO
-        PED["servicio-pedidos<br/>:8000"]
-        USU["servicio-usuarios<br/>:8001"]
-        PRO["servicio-productos<br/>:8002"]
-        PED -- "GET /usuarios/{id}<br/>http://usuarios:8001" --> USU
-        PED -- "GET /productos/{id}<br/>http://productos:8002" --> PRO
+    N["Navegador"] -- "enlace público<br/>(Tailscale Funnel)" --> IA
+    N -. "si cae A, la página<br/>cambia sola de entrada" .-> IB
+    subgraph A["Computador A"]
+        IA["interfaz :8080"] --> PA["pedidos :8000"]
+        PA --> UA["usuarios :8001"]
+        PA --> RA["productos :8002"]
+        DA[("rqlite :4001")]
     end
+    subgraph B["Computador B"]
+        IB["interfaz :8080"] --> PB["pedidos :8000"]
+        PB --> UB["usuarios :8001"]
+        PB --> RB["productos :8002"]
+        DB[("rqlite :4001")]
+    end
+    subgraph C["Computador C"]
+        IC["interfaz :8080"] --> PC["pedidos :8000"]
+        PC --> UC["usuarios :8001"]
+        PC --> RC["productos :8002"]
+        DC[("rqlite :4001")]
+    end
+    DA <-- "Raft: réplica de datos" --> DB
+    DB <-- "Raft" --> DC
+    DA <-- "Raft" --> DC
+    PA -. "si su réplica local falla" .-> UB
 ```
 
-| Servicio  | Contenedor           | Puerto | Endpoints                                                  |
-|-----------|----------------------|--------|------------------------------------------------------------|
-| usuarios  | servicio-usuarios    | 8001   | `GET /salud`, `GET /usuarios`, `GET /usuarios/<id>`, `POST /usuarios`, `PUT /usuarios/<id>`, `DELETE /usuarios/<id>` |
-| productos | servicio-productos   | 8002   | `GET /salud`, `GET /productos`, `GET /productos/<id>`, `POST /productos`, `PUT /productos/<id>`, `DELETE /productos/<id>`, `POST /productos/<id>/descontar`, `POST /operaciones/<id>/revertir` |
-| pedidos   | servicio-pedidos     | 8000   | `GET /salud`, `GET /pedidos`, `POST /pedidos`              |
-| interfaz  | servicio-interfaz    | 8080   | `GET /` (página web), `/api/<servicio>/<ruta>` (reenvío)   |
+| Servicio  | Puerto | Endpoints |
+|-----------|--------|-----------|
+| usuarios  | 8001   | `GET /salud`, `GET /usuarios`, `GET /usuarios/<id>`, `POST /usuarios`, `PUT /usuarios/<id>`, `DELETE /usuarios/<id>` |
+| productos | 8002   | `GET /salud`, `GET /productos`, `GET /productos/<id>`, `POST /productos`, `PUT /productos/<id>`, `DELETE /productos/<id>`, `POST /productos/<id>/descontar`, `POST /operaciones/<id>/revertir` |
+| pedidos   | 8000   | `GET /salud`, `GET /pedidos`, `POST /pedidos` |
+| interfaz  | 8080   | `GET /` (página web), `GET /api/cluster` (estado de todas las réplicas), `/api/<servicio>/<ruta>` (reenvío a la primera réplica que responda) |
+| rqlite    | 4001 y 4002 | 4001: consultas de los servicios · 4002: replicación entre nodos |
 
-Datos de prueba:
+Datos iniciales (se cargan una sola vez, la primera vez que arranca la base):
 
 - Usuarios: U01 Ana (activo), U02 Carlos (activo), U03 Luisa (inactivo).
 - Productos: P01 Audífonos ($50.000, 10 unidades), P02 Teclado ($120.000, 5), P03 Mouse ($35.000, 0).
 
-Códigos de respuesta de `POST /pedidos`: 201 pedido creado, 400 datos inválidos, 404 usuario o producto inexistente, 409 usuario inactivo o existencias insuficientes, 503 un servicio no responde.
+Códigos de respuesta de `POST /pedidos`: 201 pedido creado, 400 datos inválidos, 404 usuario o producto inexistente, 409 usuario inactivo o existencias insuficientes, 503 ninguna réplica de un servicio responde o la base de datos no tiene mayoría.
+
+## Persistencia, semáforos y tolerancia a fallos
+
+### Base de datos distribuida (rqlite)
+
+- **Los datos no se pierden.** rqlite guarda la base SQLite en disco, en un volumen de Docker. Apagar o reiniciar los contenedores no borra nada. Solo `docker compose down -v` borra los datos, porque elimina los volúmenes.
+- **Hay tres copias sincronizadas.** Cada escritura la recibe el nodo **líder**, que la envía a los otros dos con el algoritmo de consenso **Raft**. Se confirma cuando la mayoría (2 de 3) la guardó, así que todos los nodos tienen la misma información.
+- **Si cae un nodo, la base sigue.** Si se cae el líder, los otros dos eligen uno nuevo en pocos segundos. Con 2 de 3 nodos todo funciona. Con 1 de 3 no hay mayoría: la base deja de aceptar cambios para no quedar inconsistente, y el sistema responde 503 hasta que vuelva otro nodo.
+- **Las lecturas son de consistencia fuerte** (`level=strong`): pasan por el líder, así que nunca devuelven un dato viejo.
+- **Cada servicio maneja su propia tabla**: `usuarios`, `productos`, `operaciones` y `pedidos`. Los servicios no guardan nada en memoria; por eso cualquier réplica puede atender cualquier petición.
+
+### Semáforos
+
+- **Semáforo binario distribuido (inventario).** El líder de la base aplica las escrituras de una en una, y en el mismo orden en todos los nodos. Descontar es una sola transacción:
+
+  ```sql
+  UPDATE productos SET existencias = existencias - ? WHERE numero = ? AND existencias >= ?;
+  INSERT INTO operaciones (operacion, producto, cantidad) SELECT ?, ?, ? WHERE changes() = 1;
+  ```
+
+  Ninguna otra compra puede meterse entre "verificar" y "descontar", aunque llegue a otra réplica de productos en otro computador. Esto reemplaza al `threading.Lock` anterior, que solo protegía dentro de un proceso.
+- **Semáforo contador (pedidos).** Cada réplica de pedidos procesa como máximo 8 compras a la vez (`threading.BoundedSemaphore`, variable `PEDIDOS_SIMULTANEOS`). Las demás esperan su turno hasta 10 s, para no saturar a los otros servicios ni a la base.
+- **IDs sin choques.** La base asigna los números (`AUTOINCREMENT`). Dos réplicas que crean un usuario o un pedido al mismo tiempo nunca obtienen el mismo ID, y un ID borrado no se reutiliza.
+
+### Réplicas y cambio automático
+
+- **Lista de réplicas.** Cada servicio conoce todas las réplicas de los demás (`USUARIOS_URLS`, `PRODUCTOS_URLS`, `PEDIDOS_URLS`, `DB_URLS`): primero la de su computador y luego las de los otros. Si una no responde en 1.5 s, prueba la siguiente.
+- **Memoria de réplicas caídas.** La réplica que falló pasa al final de la lista durante 15 s. Así, solo la primera petición después de una caída paga la espera.
+- **Sin descuentos dobles.** Cada descuento lleva un identificador de operación único. Si pedidos reintenta en otra réplica de productos, la operación no se descuenta dos veces. Si no se sabe si se aplicó, pedidos la revierte (`POST /operaciones/<id>/revertir`), y revertir dos veces tampoco suma unidades de más.
+- **Entrada web redundante.** Cada computador publica su interfaz (Tailscale Funnel). La página conoce las tres entradas (`ENTRADAS`): si la suya deja de responder, sigue sola por otra y lo indica arriba a la derecha.
 
 ## Estructura de archivos
 
 ```
 laboratorio-ventas/
-├── docker-compose.yml
-├── README.md
-├── usuarios/
-│   ├── app.py
-│   ├── Dockerfile
-│   └── requirements.txt
-├── productos/
-│   ├── app.py
-│   ├── Dockerfile
-│   └── requirements.txt
-├── pedidos/
-│   ├── app.py
-│   ├── Dockerfile
-│   └── requirements.txt
-└── interfaz/
-    ├── app.py
-    ├── Dockerfile
-    ├── requirements.txt
-    └── static/
-        └── index.html
+├── docker-compose.yml        # todo en un computador, simulando el clúster
+├── docker-compose.nodo.yml   # un nodo del despliegue real (igual en los tres computadores)
+├── .env.ejemplo              # plantilla del .env de cada computador
+├── comun/
+│   ├── bd.py                 # cliente de rqlite con cambio automático de nodo
+│   └── replicas.py           # memoria de réplicas caídas
+├── usuarios/   (app.py, Dockerfile, requirements.txt)
+├── productos/  (app.py, Dockerfile, requirements.txt)
+├── pedidos/    (app.py, Dockerfile, requirements.txt)
+└── interfaz/   (app.py, Dockerfile, requirements.txt, static/index.html)
 ```
 
-Cada servicio tiene su propio `requirements.txt` porque cada imagen se construye por separado y solo debe incluir lo que necesita: usuarios y productos solo usan Flask; pedidos usa además `requests` para llamar a los otros servicios.
+Las imágenes se construyen desde la raíz del repositorio, para que cada una copie solo su `app.py` y los módulos de `comun` que necesita.
 
 ## Requisitos
 
 - Docker Desktop instalado y **abierto** (el ícono de la ballena debe indicar que está en ejecución).
 - Windows 10/11 con PowerShell, o macOS (Intel o Apple Silicon) con Terminal.
-- Puertos 8000, 8001, 8002 y 8080 libres.
+- Puertos 4001, 8000, 8001, 8002, 8080 y 8081 libres. En el despliegue en tres computadores también el 4002.
 
 Comprobar Docker:
 
@@ -115,84 +149,55 @@ Resultado esperado: ambos comandos muestran una versión. Si aparece un error de
 
 ---
 
-## Paso 1. Crear las carpetas y archivos
-
-Descomprimir el proyecto o crear la estructura anterior y copiar el contenido de cada archivo. Luego entrar a la carpeta:
+## Paso 1. Entrar a la carpeta del proyecto
 
 ```powershell
 cd ruta\a\laboratorio-ventas
 dir
 ```
 
-Resultado esperado: se ven `docker-compose.yml`, `README.md` y las carpetas `usuarios`, `productos` y `pedidos`.
+Resultado esperado: se ven `docker-compose.yml`, `docker-compose.nodo.yml`, `README.md` y las carpetas `comun`, `usuarios`, `productos`, `pedidos` e `interfaz`.
 
-## Paso 2. Construir las imágenes y levantar los contenedores
+## Paso 2. Levantar el clúster simulado en un computador
 
 ```powershell
 docker compose up -d --build
 ```
 
-`--build` construye las tres imágenes a partir de cada Dockerfile y `-d` deja los contenedores ejecutándose en segundo plano. La primera vez tarda uno o dos minutos porque descarga la imagen `python:3.12-slim`.
+Se levantan 11 contenedores: 3 nodos de la base (`bd-1`, `bd-2`, `bd-3`), 2 réplicas de cada servicio (`servicio-usuarios-1`, `servicio-usuarios-2`…) y 2 entradas web (`servicio-interfaz-1` en el puerto 8080 y `servicio-interfaz-2` en el 8081). La primera vez tarda unos minutos, porque descarga las imágenes `python:3.12-slim` y `rqlite/rqlite`.
 
-Resultado esperado al final:
-
-```
-✔ Network red_ventas            Created
-✔ Container servicio-usuarios   Started
-✔ Container servicio-productos  Started
-✔ Container servicio-pedidos    Started
-✔ Container servicio-interfaz   Started
-```
-
-## Paso 3. Comprobar que los tres servicios están en ejecución
+## Paso 3. Comprobar que todo está en ejecución
 
 ```powershell
 docker compose ps
 ```
 
-Resultado esperado: cuatro filas (`servicio-usuarios`, `servicio-productos`, `servicio-pedidos`, `servicio-interfaz`) con estado `Up` o `running` y los puertos `0.0.0.0:8001->8001/tcp`, `0.0.0.0:8002->8002/tcp`, `0.0.0.0:8000->8000/tcp` y `0.0.0.0:8080->8080/tcp`.
+Resultado esperado: los 11 contenedores con estado `Up`.
 
-Consultar la ruta de salud de cada uno:
+Consultar la base de datos, que muestra cuál nodo es el líder:
+
+```powershell
+Invoke-RestMethod "http://localhost:4001/nodes?ver=2" | Select-Object -ExpandProperty nodes | Format-Table id, leader, reachable
+```
+
+Consultar la salud y los datos (se publica la réplica 1 de cada servicio):
 
 ```powershell
 Invoke-RestMethod http://localhost:8001/salud
-Invoke-RestMethod http://localhost:8002/salud
-Invoke-RestMethod http://localhost:8000/salud
-```
-
-Resultado esperado: cada uno responde con su nombre de servicio, `estado: en ejecución` y un valor `contenedor` **distinto** (es el ID corto de cada contenedor). Compararlo con la columna `CONTAINER ID` de `docker ps`.
-
-También se pueden consultar los datos:
-
-```powershell
 Invoke-RestMethod http://localhost:8001/usuarios
 Invoke-RestMethod http://localhost:8002/productos
 ```
 
 ## Interfaz web
 
-Abrir en el navegador **http://localhost:8080**. La página muestra:
+Abrir en el navegador **http://localhost:8080** (o la entrada 2, **http://localhost:8081**). La página muestra:
 
-1. **Estado de los servicios**: consulta `/salud` de pedidos, usuarios y productos cada 3 segundos y muestra la dirección, el ID de contenedor (distinto en cada uno) y el tiempo de respuesta. Si se detiene un servicio (`docker compose stop productos`), su tarjeta se pone en rojo y las demás siguen en verde.
-2. **Crear un pedido**: formulario que envía `POST /pedidos` y muestra el código HTTP, el JSON de respuesta y el recorrido de la solicitud (validación → usuarios → productos → pedido creado), marcando en qué paso se detuvo.
-3. **Pruebas del laboratorio**: los casos de los pasos 4 a 6 y las validaciones adicionales. El botón **Ejecutar todas** los corre en orden y compara el código obtenido con el esperado.
-4. **Gestión de usuarios y productos**: crear (`POST`), consultar (`GET`), modificar (`PUT`) y eliminar (`DELETE`). El ID lo asigna el servicio (U04, P04…); al modificar solo se envían los campos con valor. Los cambios viven en memoria.
-5. **Pedidos registrados**: tabla de los pedidos en memoria.
-6. **Registro de solicitudes**: cada petición hecha desde la página, con la dirección real del servicio que la atendió. Tiene su propio desplazamiento y guarda las últimas 300.
-
-El navegador no llama directamente a los servicios: la interfaz reenvía cada petición (`/api/pedidos/pedidos` → `http://pedidos:8000/pedidos`). Es un cliente más, como PowerShell o Postman; la comunicación entre pedidos, usuarios y productos sigue siendo la misma. La evidencia directa de esa comunicación sigue estando en `docker compose logs pedidos`.
-
-## Inventario y concurrencia
-
-Cada pedido aceptado descuenta su cantidad de las existencias del producto.
-
-- **Operación atómica.** Pedidos no consulta las existencias y luego descuenta en dos pasos: llama a `POST /productos/<id>/descontar`, y productos verifica y descuenta en un solo paso. Si fueran dos peticiones, dos pedidos simultáneos podrían ver las mismas unidades disponibles y venderlas dos veces.
-- **Semáforo.** Flask atiende cada petición en un hilo distinto. En cada servicio, un semáforo binario (`threading.Lock`) deja entrar a un solo hilo a la vez en las secciones críticas: descontar y reponer existencias, crear, modificar y eliminar, generar IDs y listar.
-- **Compensación.** Cada descuento lleva un identificador de operación único. Si la respuesta de productos no llega (por ejemplo, por un tiempo de espera agotado), pedidos no sabe si se descontó, así que llama a `POST /operaciones/<id>/revertir`. Una operación solo se aplica y se revierte una vez, de modo que un reintento no descuenta ni devuelve unidades dos veces.
-
-La interfaz web tiene una **prueba de concurrencia** (sección 03): envía muchos pedidos a la vez y comprueba que `existencias antes − aceptados × cantidad = existencias después`.
-
-Limitación: el semáforo funciona dentro de un solo proceso. Con varias réplicas de productos haría falta una base de datos con transacciones, por ejemplo `UPDATE ... SET existencias = existencias - n WHERE existencias >= n`.
+1. **Estado del clúster**: cada 3 segundos, las réplicas de usuarios, productos y pedidos, y los nodos de la base con su papel (líder o seguidor). Verde es todo en orden; ámbar, algo cayó pero el servicio sigue en pie; rojo, caído.
+2. **Crear un pedido**: envía `POST /pedidos` y muestra el código HTTP, el JSON de respuesta y el recorrido de la solicitud.
+3. **Pruebas del laboratorio**: los casos de los pasos 4 a 6 y una **prueba de concurrencia**, que envía muchos pedidos a la vez y comprueba que `existencias antes − aceptados × cantidad = existencias después`.
+4. **Gestión de usuarios y productos**: crear (`POST`), consultar (`GET`), modificar (`PUT`) y eliminar (`DELETE`).
+5. **Pedidos registrados**, con la réplica de pedidos que atendió cada compra.
+6. **Registro de solicitudes**: cada petición, con la dirección exacta de la réplica que la atendió.
 
 ## Preparación de las pruebas de compra (PowerShell)
 
@@ -221,25 +226,7 @@ Si se cierra la ventana de PowerShell, hay que volver a pegar la función.
 Enviar-Pedido U01 P01 2
 ```
 
-Resultado esperado:
-
-```
-HTTP 201
-{
-    "mensaje":  "Pedido creado correctamente",
-    "pedido":  {
-                   "cantidad":  2,
-                   "fecha_utc":  "2026-10-22T21:54:10+00:00",
-                   "id":  "PED-0001",
-                   "precio_unitario":  50000,
-                   "producto":  { "id":  "P01", "nombre":  "Audífonos" },
-                   "total":  100000,
-                   "usuario":  { "id":  "U01", "nombre":  "Ana" }
-               }
-}
-```
-
-La disposición exacta de espacios varía según la versión de PowerShell, la fecha cambia y el ID aumenta con cada pedido. Para ver los pedidos guardados en memoria:
+Resultado esperado: `HTTP 201` y el pedido con `"id": "PED-0001"` (el número aumenta con cada pedido), el total de 100000, las existencias restantes y `atendido_por` (la réplica de pedidos que lo procesó). Para ver los pedidos guardados:
 
 ```powershell
 (Invoke-WebRequest http://localhost:8000/pedidos -UseBasicParsing).Content
@@ -251,12 +238,7 @@ La disposición exacta de espacios varía según la versión de PowerShell, la f
 Enviar-Pedido U99 P01 1
 ```
 
-Resultado esperado:
-
-```
-HTTP 404
-{ "error":  "El usuario U99 no existe" }
-```
+Resultado esperado: `HTTP 404` y `{ "error": "El usuario U99 no existe" }`.
 
 ## Paso 6. Cantidad superior a las existencias
 
@@ -264,12 +246,7 @@ HTTP 404
 Enviar-Pedido U01 P01 50
 ```
 
-Resultado esperado:
-
-```
-HTTP 409
-{ "error":  "Existencias insuficientes de Audífonos: se solicitaron 50 y solo hay 10" }
-```
+Resultado esperado: `HTTP 409` y `Existencias insuficientes de Audífonos: se solicitaron 50 y solo hay 8`.
 
 Pruebas adicionales de validación:
 
@@ -282,176 +259,132 @@ Pruebas adicionales de validación:
 
 ## Paso 7. Consultar los registros de ejecución
 
-Registros de los tres servicios juntos:
-
 ```powershell
-docker compose logs
+docker compose logs -f pedidos-1
 ```
 
-Registros de un servicio y seguimiento en vivo (salir con Ctrl+C):
-
-```powershell
-docker compose logs -f pedidos
-```
-
-Resultado esperado después de la compra válida, en `pedidos`:
+Resultado esperado después de la compra válida:
 
 ```
 [pedidos] Solicitud recibida: {'usuario_id': 'U01', 'producto_id': 'P01', 'cantidad': 2}
-[pedidos] -> GET http://usuarios:8001/usuarios/U01
-[pedidos] <- 200 desde el servicio de usuarios
-[pedidos] -> POST http://productos:8002/productos/P01/descontar
-[pedidos] <- 200 desde el servicio de productos
+[pedidos] -> GET http://usuarios-1:8001/usuarios/U01
+[pedidos] <- 200 desde usuarios en http://usuarios-1:8001
+[pedidos] -> POST http://productos-1:8002/productos/P01/descontar
+[pedidos] <- 200 desde productos en http://productos-1:8002
 [pedidos] Pedido PED-0001 creado. Total: 100000. Quedan 8 de P01
 ```
 
-Y en `usuarios` (la IP es la del contenedor de pedidos, puede variar):
+Las líneas `WARNING: This is a development server` son normales en un laboratorio.
 
-```
-[usuarios] Consulta del usuario U01 desde 172.18.0.4
-172.18.0.4 - - [...] "GET /usuarios/U01 HTTP/1.1" 200 -
-```
-
-Esto demuestra que la solicitud llegó a usuarios **desde otro contenedor** a través de la red interna, no desde el cliente. Las líneas `WARNING: This is a development server` son normales en un laboratorio (ver limitaciones).
-
-## Paso 8. Detener y volver a iniciar el sistema
-
-```powershell
-docker compose stop
-docker compose ps -a
-docker compose start
-```
-
-Resultado esperado: tras `stop`, los contenedores aparecen como `Exited`; tras `start`, vuelven a `Up`. Al consultar de nuevo `(Invoke-WebRequest http://localhost:8000/pedidos -UseBasicParsing).Content` el resultado es `[]`: los pedidos estaban en memoria y se perdieron al detener el proceso.
-
-Para eliminar contenedores y red, y luego recrearlos:
+## Paso 8. Persistencia: apagar todo y volver a encender
 
 ```powershell
 docker compose down
 docker compose up -d
+(Invoke-WebRequest http://localhost:8000/pedidos -UseBasicParsing).Content
 ```
 
-`down` elimina los contenedores y la red `red_ventas` pero conserva las imágenes, así que `up -d` es rápido. Si se modifica algún `app.py`, usar `docker compose up -d --build`.
+Resultado esperado: los pedidos, usuarios y productos siguen ahí. `down` elimina los contenedores, pero no los volúmenes con los datos. Para empezar de cero, con los datos iniciales, usar `docker compose down -v`.
 
-## Paso 9. Comprobar la comunicación y la independencia
+## Paso 9. Tolerancia a fallos
 
-### 9.1 Red de Docker
+Con la interfaz abierta en http://localhost:8080 se ve cada caída en tiempo real.
+
+### 9.1 Se cae una réplica de cada servicio
 
 ```powershell
-docker network ls
+docker compose stop usuarios-1 productos-1 pedidos-1
+```
+
+Hacer una compra desde la interfaz (puerto 8080). Resultado esperado: `201`, atendida por `pedidos-2`. Las tarjetas quedan en ámbar ("1/2 réplicas · sigue en pie"). La primera compra tarda unos segundos mientras descubre las caídas; las siguientes son inmediatas.
+
+```powershell
+docker compose start usuarios-1 productos-1 pedidos-1
+```
+
+### 9.2 Se cae el nodo líder de la base
+
+Ver cuál es el líder en la tarjeta "Base de datos" y detenerlo, por ejemplo:
+
+```powershell
+docker compose stop rqlite-1
+```
+
+Resultado esperado: en pocos segundos otro nodo pasa a ser líder y las compras siguen funcionando.
+
+### 9.3 Se pierde la mayoría
+
+```powershell
+docker compose stop rqlite-2
+```
+
+Con solo 1 de 3 nodos, la base deja de aceptar cambios. Una compra responde `503` con "La base de datos no está disponible". Al volver a encender un nodo, el sistema se recupera solo:
+
+```powershell
+docker compose start rqlite-1 rqlite-2
+```
+
+### 9.4 Se cae una entrada web
+
+Con la página abierta en http://localhost:8080:
+
+```powershell
+docker compose stop interfaz-1
+```
+
+Resultado esperado: la página sigue funcionando y arriba a la derecha muestra "entrada: localhost:8081 · cambió automáticamente".
+
+```powershell
+docker compose start interfaz-1
+```
+
+### 9.5 Red, DNS y kernel compartido
+
+```powershell
 docker network inspect red_ventas --format "{{range .Containers}}{{.Name}} {{.IPv4Address}}{{println}}{{end}}"
+docker compose exec pedidos-1 python -c "import requests; print(requests.get('http://usuarios-2:8001/salud').text)"
+docker compose exec pedidos-1 python -c "import requests; print(requests.get('http://localhost:8001/salud').text)"
+docker compose exec usuarios-1 uname -r
+docker compose exec productos-1 uname -r
 ```
 
-Resultado esperado: aparece `red_ventas` y los tres contenedores con una IP distinta cada uno (por ejemplo `172.18.0.2/16`, `.3`, `.4`).
+Resultado esperado: cada contenedor tiene su propia IP. Pedidos llega a `usuarios-2` por su nombre de servicio. La llamada a `localhost` falla con `Connection refused`, porque dentro del contenedor `localhost` es el propio contenedor. Los dos `uname -r` muestran el mismo kernel, el de la máquina virtual ligera de Docker Desktop.
 
-### 9.2 Resolución por nombre de servicio (DNS interno)
+## Paso 10. Despliegue real en tres computadores
 
-Ejecutar una petición desde **dentro** del contenedor de pedidos usando el nombre `usuarios`:
+Los tres computadores usan **el mismo archivo**, `docker-compose.nodo.yml`. Cada uno corre un nodo de la base y una réplica de cada servicio. Solo cambia el `.env`.
 
-```powershell
-docker compose exec pedidos python -c "import requests; print(requests.get('http://usuarios:8001/salud').text)"
-```
-
-Resultado esperado: el JSON de salud del servicio de usuarios.
-
-Repetir con `localhost`:
-
-```powershell
-docker compose exec pedidos python -c "import requests; print(requests.get('http://localhost:8001/salud').text)"
-```
-
-Resultado esperado: un error que termina en `Connection refused`. Dentro del contenedor de pedidos, `localhost` es el propio contenedor de pedidos, donde no hay nada escuchando en el puerto 8001. Por eso el servicio usa `http://usuarios:8001`.
-
-### 9.3 Contenedores separados con kernel compartido
-
-```powershell
-docker compose top
-docker compose exec usuarios hostname
-docker compose exec productos hostname
-docker compose exec usuarios uname -r
-docker compose exec productos uname -r
-docker stats --no-stream
-```
-
-Resultado esperado: `top` muestra un proceso `python app.py` en cada contenedor; los `hostname` son distintos; los dos `uname -r` muestran **la misma** versión de kernel Linux (la de la máquina virtual ligera que usa Docker Desktop, por ejemplo terminada en `microsoft-standard-WSL2` en Windows o `linuxkit` en Mac); `docker stats` muestra CPU y memoria de cada contenedor por separado.
-
-### 9.4 Fallo del servicio de productos
-
-```powershell
-docker compose stop productos
-Invoke-RestMethod http://localhost:8001/usuarios/U01
-Enviar-Pedido U01 P01 1
-docker compose logs --tail 6 pedidos
-```
-
-Resultado esperado: usuarios sigue respondiendo con los datos de Ana (es independiente), pero la compra devuelve:
-
-```
-HTTP 503
-{ "error":  "El servicio de productos no está disponible. Intente más tarde." }
-```
-
-En los registros de pedidos se ve que la consulta a usuarios respondió 200 y la consulta a productos falló con un error de resolución de nombre (`Failed to resolve 'productos'` o `NameResolutionError`): al detenerse el contenedor, el DNS de Docker deja de resolver ese nombre.
-
-Recuperar el servicio y repetir:
-
-```powershell
-docker compose start productos
-Enviar-Pedido U01 P01 1
-```
-
-Resultado esperado: `HTTP 201`. No fue necesario reiniciar pedidos ni usuarios.
-
-### 9.5 Independencia del servicio de pedidos
-
-```powershell
-docker compose stop pedidos
-Invoke-RestMethod http://localhost:8001/salud
-Invoke-RestMethod http://localhost:8002/salud
-docker compose start pedidos
-```
-
-Resultado esperado: usuarios y productos responden aunque pedidos esté detenido.
-
-## Paso 10. Cada servicio en un computador distinto
-
-Los pasos anteriores corren los tres contenedores en un mismo equipo. Para repartirlos, cada computador levanta un solo servicio con su propio archivo compose, y pedidos llega a los otros dos por la **IP de cada equipo**. En ningún caso se usa `localhost`.
-
-| Computador | Servicio | Archivo | Puerto |
-|---|---|---|---|
-| A | usuarios  | `docker-compose.computador-a.yml` | 8001 |
-| B | productos | `docker-compose.computador-b.yml` | 8002 |
-| C | pedidos e interfaz web | `docker-compose.computador-c.yml` + `.env` | 8000 y 8080 |
-
-Resumen (la guía paso a paso completa está en el documento del grupo):
-
-1. Los tres equipos en la misma red (mismo Wi-Fi o Tailscale). Cada uno anota su IP con `ipconfig` (Windows) o `ipconfig getifaddr en0` (Mac).
-2. En Windows, abrir el puerto del servicio en PowerShell como administrador (8001 en A, 8002 en B, 8000 y 8080 en C, con `-LocalPort 8000,8080`):
+1. **Una sola red de Tailscale.** Los tres equipos deben estar en la misma red de Tailscale (la misma cuenta, o invitados a la misma red) y verse entre sí. Cada uno anota su IP con `tailscale ip -4`.
+2. **Firewall.** En cada Windows, abrir los puertos en PowerShell como administrador:
 
    ```powershell
-   New-NetFirewallRule -DisplayName "Laboratorio ventas" -Direction Inbound -Protocol TCP -LocalPort 8001 -Action Allow -Profile Any
+   New-NetFirewallRule -DisplayName "Laboratorio ventas" -Direction Inbound -Protocol TCP -LocalPort 4001,4002,8000,8001,8002,8080 -Action Allow -Profile Any
    ```
 
-3. A y B levantan su servicio:
-
-   ```powershell
-   docker compose -f docker-compose.computador-a.yml up -d --build   # en A
-   docker compose -f docker-compose.computador-b.yml up -d --build   # en B
-   ```
-
-4. C copia `.env.ejemplo` como `.env`, escribe las IP de A y B, y levanta pedidos:
+3. **Archivo `.env`** en cada computador:
 
    ```powershell
    Copy-Item .env.ejemplo .env
    notepad .env
-   docker compose -f docker-compose.computador-c.yml up -d --build
    ```
 
-   `.env` está en `.gitignore` porque las IP cambian según el equipo y la red.
+   Poner `NODO` (A, B o C), `MI_IP` (la IP de ese equipo), `IP_OTRO_1` e `IP_OTRO_2` (las de los otros dos) y, cuando estén creados, los tres enlaces públicos en `ENTRADAS`. `.env` está en `.gitignore`, porque cambia en cada equipo.
 
-5. Las pruebas se hacen desde cualquier equipo con la IP de C, por ejemplo `Invoke-RestMethod http://192.168.0.12:8000/salud`. En `Enviar-Pedido`, cambiar `localhost` por la IP de C. La interfaz web se abre en `http://<IP-de-C>:8080` y en las tarjetas de estado se ven las IP de A y B.
+4. **Levantar los tres a la vez.** La primera vez la base espera a los tres nodos para elegir un líder:
 
-Resultado esperado: las compras funcionan igual que en un solo equipo, y en `docker compose -f docker-compose.computador-c.yml logs pedidos` las líneas `->` muestran las IP de A y B.
+   ```powershell
+   docker compose -f docker-compose.nodo.yml up -d --build
+   ```
+
+5. **Publicar la interfaz** en cada computador:
+
+   ```powershell
+   tailscale funnel --bg 8080
+   ```
+
+   Copiar los tres enlaces `https://…ts.net` en `ENTRADAS` del `.env` de cada equipo y aplicar el cambio con `docker compose -f docker-compose.nodo.yml up -d`.
+
+**Prueba de la tolerancia a fallos:** abrir el enlace de C, apagar Docker o el computador C completo, y seguir comprando. La página cambia sola a la entrada de A o B, la base sigue con 2 de 3 nodos y los pedidos los atienden las réplicas de A y B. Al encender C de nuevo, su nodo se pone al día solo con los datos que se escribieron mientras estaba apagado.
 
 ---
 
@@ -460,25 +393,16 @@ Resultado esperado: las compras funcionan igual que en un solo equipo, y en `doc
 Los comandos `docker` y `docker compose` son idénticos. Solo cambian las peticiones HTTP, que se hacen con `curl`:
 
 ```bash
-# Salud y consultas
 curl http://localhost:8001/salud
 curl http://localhost:8002/productos
-
-# Compra válida
 curl -s -X POST http://localhost:8000/pedidos \
   -H "Content-Type: application/json" \
   -d '{"usuario_id":"U01","producto_id":"P01","cantidad":2}' \
   -w "\nHTTP %{http_code}\n"
-
-# Usuario inexistente / existencias insuficientes: cambiar el JSON
-#   {"usuario_id":"U99","producto_id":"P01","cantidad":1}
-#   {"usuario_id":"U01","producto_id":"P01","cantidad":50}
-
-# Pedidos en memoria
-curl http://localhost:8000/pedidos
+curl "http://localhost:4001/nodes?ver=2"
 ```
 
-En la salida de `curl`, las tildes aparecen como `\u00ed`, `\u00e1`, etc. Es la forma estándar de JSON de representar esos caracteres; PowerShell y Postman los muestran normalmente.
+En la salida de `curl`, las tildes aparecen como `í`, `á`, etc. Es la forma estándar de JSON de representar esos caracteres.
 
 ## Pruebas con Postman
 
@@ -489,13 +413,13 @@ En la salida de `curl`, las tildes aparecen como `\u00ed`, `\u00e1`, etc. Es la 
 { "usuario_id": "U01", "producto_id": "P01", "cantidad": 2 }
 ```
 
-Postman muestra el código (201, 404, 409, 503) y el JSON de respuesta.
-
 ## Solución de problemas
 
 | Síntoma | Causa probable | Solución |
 |---|---|---|
 | `error during connect` o `Cannot connect to the Docker daemon` | Docker Desktop cerrado | Abrir Docker Desktop y esperar a que inicie |
-| `port is already allocated` | Otro programa usa 8000, 8001, 8002 u 8080 | Cerrar ese programa o cambiar el puerto izquierdo en `ports` del compose |
-| `No se puede conectar con el servidor remoto` en PowerShell | Contenedores detenidos | `docker compose ps` y luego `docker compose up -d` |
+| `port is already allocated` | Otro programa o un sistema anterior usa 4001, 8000-8002, 8080 u 8081 | `docker ps` para ver quién lo usa y detenerlo, o cambiar el puerto izquierdo en `ports` |
+| Los servicios repiten "Esperando a la base de datos" | La base todavía no tiene líder; la primera vez necesita los tres nodos | Esperar o revisar `docker compose logs rqlite-1`; en tres computadores, que los tres estén encendidos y se vean por Tailscale |
+| Todas las compras responden 503 "La base de datos no está disponible" | Quedan menos de 2 nodos de la base | Encender otro nodo; el sistema se recupera solo |
+| Se quieren borrar todos los datos y empezar de cero | Los datos persisten en volúmenes | `docker compose down -v` y luego `docker compose up -d` |
 | Los cambios en `app.py` no se reflejan | La imagen no se reconstruyó | `docker compose up -d --build` |

@@ -44,19 +44,26 @@
   .arriba .punto, .punto.arriba { background: var(--verde); }
   .abajo .punto, .punto.abajo { background: var(--rojo); }
 
-  /* Estado de los servicios */
-  .servicios { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--linea); background: var(--superficie); }
-  .servicio { padding: 16px 18px; border-left: 1px solid var(--linea); }
-  .servicio:first-child { border-left: 0; }
-  @media (max-width: 760px) {
-    .servicios { grid-template-columns: 1fr; }
-    .servicio { border-left: 0; border-top: 1px solid var(--linea); }
-    .servicio:first-child { border-top: 0; }
-  }
+  .parcial .punto, .punto.parcial { background: var(--ambar); }
+
+  /* Estado del clúster: una tarjeta por servicio, con sus réplicas */
+  .servicios { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; border: 1px solid var(--linea); background: var(--linea); }
+  @media (max-width: 760px) { .servicios { grid-template-columns: 1fr; } }
+  .servicio { padding: 16px 18px; background: var(--superficie); min-width: 0; }
   .servicio .nombre { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
   .servicio .nombre b { font-size: 15px; font-weight: 600; }
-  .servicio .estado { display: flex; align-items: center; gap: 7px; margin: 6px 0 12px; font-size: 13px; color: var(--suave); }
+  .servicio .estado { display: flex; align-items: center; gap: 7px; margin: 6px 0 10px; font-size: 13px; color: var(--suave); }
+  .servicio.parcial .estado { color: var(--ambar); }
   .servicio.abajo .estado { color: var(--rojo); }
+  .replica { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-top: 1px solid var(--linea); font: 12px var(--mono); min-width: 0; }
+  .replica .dir { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .replica .detalle { margin-left: auto; color: var(--tenue); white-space: nowrap; }
+  .replica.abajo .dir { color: var(--rojo); text-decoration: line-through; }
+  /* Cada réplica muestra su propio color, aunque la tarjeta esté en ámbar */
+  .replica.arriba .punto { background: var(--verde); }
+  .replica.abajo .punto { background: var(--rojo); }
+  .lider { font-weight: 600; color: var(--tinta); }
+  .cabecera-derecha { display: grid; gap: 4px; justify-items: end; }
   dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 14px; font-size: 12px; }
   dt { color: var(--tenue); }
   dd { margin: 0; font-family: var(--mono); overflow-wrap: anywhere; }
@@ -144,15 +151,18 @@
       <div class="etiqueta-mono">Laboratorio · Docker · HTTP/JSON</div>
       <h1>Sistema de ventas distribuido</h1>
     </div>
-    <div class="resumen" id="resumen"><span class="punto"></span>comprobando servicios…</div>
+    <div class="cabecera-derecha">
+      <div class="resumen" id="resumen"><span class="punto"></span>comprobando el clúster…</div>
+      <div class="resumen" id="entrada"></div>
+    </div>
   </header>
 
   <section class="seccion">
     <div class="cabeza">
       <div class="etiqueta-mono">01</div>
-      <h2>Estado de los servicios</h2>
-      <p>Consulta <code>GET /salud</code> cada 3 segundos. Cada servicio responde desde un contenedor distinto.</p>
-      <p>Detenga uno con <code>docker compose stop productos</code>: los demás siguen respondiendo.</p>
+      <h2>Estado del clúster</h2>
+      <p>Cada servicio tiene varias réplicas, en distintos contenedores o computadores, y la base de datos tiene tres nodos que se copian entre sí. Se revisa cada 3 segundos.</p>
+      <p>Detenga una réplica o un nodo: el sistema sigue respondiendo con los demás. La base solo necesita que funcione la mayoría de sus nodos (2 de 3).</p>
     </div>
     <div class="servicios" id="servicios"></div>
   </section>
@@ -208,7 +218,7 @@
       <div class="bloque">
         <div class="etiqueta-mono subtitulo">Prueba de concurrencia</div>
         <p class="nota" style="margin:0 0 12px">Envía muchos pedidos al mismo tiempo (usuario U01) sobre un producto.
-          Como productos verifica y descuenta dentro de un semáforo, se aceptan solo las unidades que hay y el inventario nunca queda negativo.</p>
+          Como productos verifica y descuenta en una sola transacción de la base de datos, aunque las compras lleguen a réplicas distintas se aceptan solo las unidades que hay y el inventario nunca queda negativo.</p>
         <form class="crud concurrencia" id="form-concurrencia">
           <label><span class="etiqueta-mono">Producto</span><input name="producto" list="lista-productos" value="P02" autocomplete="off"></label>
           <label><span class="etiqueta-mono">Pedidos simultáneos</span><input name="total" type="number" min="1" max="100" value="20"></label>
@@ -226,7 +236,7 @@
       <h2>Gestión de usuarios y productos</h2>
       <p>Crear, consultar, modificar y eliminar. Cada botón muestra el método HTTP que envía al servicio.</p>
       <p>Haga clic en una fila para cargarla en el formulario. El ID lo asigna el servicio al crear.</p>
-      <p>Los cambios viven en memoria: se pierden al reiniciar el contenedor.</p>
+      <p>Los cambios se guardan en la base de datos distribuida: no se pierden al reiniciar y todas las réplicas los ven.</p>
     </div>
     <div class="columnas">
       <div>
@@ -278,11 +288,11 @@
     <div class="cabeza">
       <div class="etiqueta-mono">05</div>
       <h2>Pedidos registrados</h2>
-      <p>Viven en memoria en el servicio de pedidos y se pierden al detener el contenedor.</p>
+      <p>Se guardan en la base de datos distribuida. La columna "Atendió" muestra qué réplica de pedidos procesó cada compra.</p>
       <button id="recargar">Recargar datos</button>
     </div>
     <div class="tabla"><table>
-      <thead><tr><th>ID</th><th>Usuario</th><th>Producto</th><th class="num">Cant.</th><th class="num">Precio unit.</th><th class="num">Total</th><th>Fecha UTC</th></tr></thead>
+      <thead><tr><th>ID</th><th>Usuario</th><th>Producto</th><th class="num">Cant.</th><th class="num">Precio unit.</th><th class="num">Total</th><th>Atendió</th><th>Fecha UTC</th></tr></thead>
       <tbody id="pedidos"></tbody>
     </table></div>
   </section>
@@ -305,14 +315,15 @@
     </div>
   </section>
 
-  <footer>Interfaz web en el puerto 8080 · reenvía cada petición a pedidos (8000), usuarios (8001) y productos (8002).</footer>
+  <footer>Interfaz web en el puerto 8080 · reenvía cada petición a la primera réplica que responda de pedidos (8000), usuarios (8001) y productos (8002) · base de datos rqlite (4001).</footer>
 </div>
 
 <script>
-const SERVICIOS = [
-  { id: "pedidos", nombre: "Pedidos", puerto: 8000 },
+const TARJETAS = [
   { id: "usuarios", nombre: "Usuarios", puerto: 8001 },
   { id: "productos", nombre: "Productos", puerto: 8002 },
+  { id: "pedidos", nombre: "Pedidos", puerto: 8000 },
+  { id: "bd", nombre: "Base de datos (rqlite)", puerto: 4001 },
 ];
 const PRUEBAS = [
   { caso: "Compra válida", usuario: "U01", producto: "P01", cantidad: 2, esperado: 201 },
@@ -328,7 +339,7 @@ const PASOS = [
   ["Validación de datos", "usuario_id, producto_id y cantidad entera mayor que cero"],
   ["Servicio de usuarios", "GET /usuarios/{id}: debe existir y estar activo"],
   ["Servicio de productos", "POST /productos/{id}/descontar: verifica y descuenta las existencias en un solo paso atómico"],
-  ["Pedido creado", "Se calcula el total y se registra con un ID único"],
+  ["Pedido creado", "Se calcula el total y se guarda en la base de datos con un ID único"],
 ];
 
 const $ = (id) => document.getElementById(id);
@@ -336,21 +347,46 @@ const pesos = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP
 const escapar = (texto) => String(texto ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const codigoHtml = (codigo) => `<span class="codigo c${String(codigo || 5)[0]}">${codigo || "sin respuesta"}</span>`;
 const hora = () => new Date().toLocaleTimeString("es-CO", { hour12: false });
-let configuracion = {};
+const sinEsquema = (url) => String(url).replace(/^https?:\/\//, "");
+
+/* Entradas: la página puede hablar con la interfaz de cualquier computador.
+   Si la suya deja de responder, cambia sola a la siguiente y sigue funcionando. */
+let entradas = [""];   // "" = la misma dirección desde la que se abrió la página
+let actual = 0;
+
+async function pedir(ruta, opciones) {
+  for (let intento = 0; intento < entradas.length; intento++) {
+    try {
+      const respuesta = await fetch(`${entradas[actual]}${ruta}`, opciones);
+      // 502 = el túnel público llegó al computador, pero ahí no hay interfaz.
+      if (respuesta.status !== 502 || entradas.length === 1) return respuesta;
+    } catch { /* la entrada no responde: se prueba la siguiente */ }
+    actual = (actual + 1) % entradas.length;
+    mostrarEntrada();
+  }
+  throw new Error("ninguna entrada responde");
+}
+
+function mostrarEntrada() {
+  const nombre = sinEsquema(entradas[actual] || location.origin);
+  $("entrada").innerHTML = actual === 0
+    ? `entrada: ${escapar(nombre)}`
+    : `<span class="punto parcial"></span>entrada: ${escapar(nombre)} · cambió automáticamente`;
+}
 
 async function llamar(servicio, ruta, opciones = {}, registrar = true) {
   const metodo = opciones.method || "GET";
-  let codigo = 0, datos = null, destino = `${configuracion[servicio] || servicio}/${ruta}`, origen = "interfaz", ms = 0;
+  let codigo = 0, datos = null, destino = `${servicio}/${ruta}`, origen = "interfaz", ms = 0;
   const inicio = performance.now();
   try {
-    const respuesta = await fetch(`/api/${servicio}/${ruta}`, opciones);
+    const respuesta = await pedir(`/api/${servicio}/${ruta}`, opciones);
     codigo = respuesta.status;
     destino = respuesta.headers.get("X-Destino") || destino;
     origen = respuesta.headers.get("X-Origen") || origen;
     ms = Number(respuesta.headers.get("X-Duracion-ms")) || Math.round(performance.now() - inicio);
     datos = await respuesta.json().catch(() => null);
   } catch {
-    datos = { error: "No se pudo conectar con la interfaz web (puerto 8080)." };
+    datos = { error: "No responde ninguna entrada de la interfaz web (puerto 8080)." };
   }
   if (registrar) agregarRegistro(metodo, destino, codigo, ms);
   return { metodo, codigo, datos, destino, origen, ms };
@@ -380,34 +416,53 @@ $("limpiar-registro").addEventListener("click", () => {
   $("registro").innerHTML = `<tr><td colspan="5" class="vacio">Sin solicitudes todavía.</td></tr>`;
 });
 
-/* 01. Estado de los servicios */
-function dibujarServicios() {
-  $("servicios").innerHTML = SERVICIOS.map((s) => `
-    <div class="servicio" id="srv-${s.id}">
-      <div class="nombre"><b>${s.nombre}</b><span class="etiqueta-mono">:${s.puerto}</span></div>
-      <div class="estado"><span class="punto"></span><span class="texto">comprobando…</span></div>
-      <dl>
-        <dt>Dirección</dt><dd>${escapar(configuracion[s.id] || "")}</dd>
-        <dt>Contenedor</dt><dd class="id-contenedor">—</dd>
-        <dt>Respuesta</dt><dd class="tiempo">—</dd>
-      </dl>
-    </div>`).join("");
+/* 01. Estado del clúster */
+function filaReplica(ok, direccion, detalle) {
+  return `<div class="replica ${ok ? "arriba" : "abajo"}"><span class="punto"></span>
+    <span class="dir" title="${escapar(direccion)}">${escapar(sinEsquema(direccion))}</span>
+    <span class="detalle">${detalle}</span></div>`;
 }
 
-async function revisarSalud() {
-  const resultados = await Promise.all(SERVICIOS.map(async (s) => {
-    const r = await llamar(s.id, "salud", {}, false);
-    const tarjeta = $(`srv-${s.id}`);
-    const arriba = r.codigo === 200 && r.origen === s.id;
-    tarjeta.className = "servicio " + (arriba ? "arriba" : "abajo");
-    tarjeta.querySelector(".texto").textContent = arriba ? "En ejecución" : (r.datos?.error || "Sin respuesta");
-    tarjeta.querySelector(".id-contenedor").textContent = arriba ? r.datos.contenedor : "—";
-    tarjeta.querySelector(".tiempo").textContent = arriba ? `${r.ms} ms` : "—";
-    return arriba;
-  }));
-  const activos = resultados.filter(Boolean).length;
-  const clase = activos === SERVICIOS.length ? "arriba" : "abajo";
-  $("resumen").innerHTML = `<span class="punto ${clase}"></span>${activos}/${SERVICIOS.length} servicios en ejecución · ${hora()}`;
+function tarjeta(t, filas, activos, total, enPie) {
+  // Verde: todo responde · ámbar: algo cayó pero el servicio sigue en pie · rojo: caído.
+  const clase = activos === total ? "arriba" : enPie ? "parcial" : "abajo";
+  const unidad = t.id === "bd" ? "nodos" : "réplicas";
+  const estado = activos === total ? `${activos}/${total} ${unidad} en ejecución`
+    : enPie ? `${activos}/${total} ${unidad} · sigue en pie`
+    : t.id === "bd" ? `${activos}/${total} nodos · sin mayoría, no acepta cambios` : "sin réplicas disponibles";
+  return `<div class="servicio ${clase}">
+      <div class="nombre"><b>${t.nombre}</b><span class="etiqueta-mono">:${t.puerto}</span></div>
+      <div class="estado"><span class="punto"></span>${estado}</div>${filas}</div>`;
+}
+
+async function revisarCluster() {
+  let c;
+  try { c = await (await pedir("/api/cluster")).json(); } catch { c = null; }
+  if (!c) {
+    $("resumen").innerHTML = `<span class="punto abajo"></span>sin conexión con la interfaz · ${hora()}`;
+    return;
+  }
+  let activos = 0, total = 0;
+  $("servicios").innerHTML = TARJETAS.map((t) => {
+    if (t.id === "bd") {
+      const nodos = c.bd || [];
+      const ok = nodos.filter((n) => n.ok).length;
+      const filas = nodos.map((n) => filaReplica(n.ok, n.direccion,
+        n.ok ? (n.lider ? `<span class="lider">líder</span>` : "seguidor") : "sin respuesta")).join("")
+        || `<div class="replica abajo"><span class="punto"></span>ningún nodo responde</div>`;
+      return tarjeta(t, filas, ok, nodos.length || 3, ok * 2 > (nodos.length || 3));
+    }
+    const replicas = c.servicios[t.id] || [];
+    const ok = replicas.filter((r) => r.ok).length;
+    activos += ok; total += replicas.length;
+    const filas = replicas.map((r) => filaReplica(r.ok, r.url,
+      r.ok ? `${escapar(r.nodo)} · ${escapar(r.contenedor)} · ${r.ms} ms` : "sin respuesta")).join("");
+    return tarjeta(t, filas, ok, replicas.length, ok > 0);
+  }).join("");
+  const lider = (c.bd || []).find((n) => n.lider);
+  const clase = activos === total && lider ? "arriba" : activos > 0 && lider ? "parcial" : "abajo";
+  $("resumen").innerHTML = `<span class="punto ${clase}"></span>${activos}/${total} réplicas en ejecución · `
+    + `${lider ? `líder de la base: ${escapar(lider.id)}` : "base sin líder"} · ${hora()}`;
 }
 
 /* 04 y 05. Datos de cada servicio */
@@ -437,13 +492,14 @@ async function cargarDatos() {
     $("lista-productos").innerHTML = productos.datos.map((p) => `<option value="${p.id}">${escapar(p.nombre)}</option>`).join("");
   } else $("productos").innerHTML = sinDatos(4, productos);
 
-  if (pedidos.codigo !== 200) $("pedidos").innerHTML = sinDatos(7, pedidos);
-  else if (pedidos.datos.length === 0) $("pedidos").innerHTML = `<tr><td colspan="7" class="vacio">No hay pedidos en memoria.</td></tr>`;
+  if (pedidos.codigo !== 200) $("pedidos").innerHTML = sinDatos(8, pedidos);
+  else if (pedidos.datos.length === 0) $("pedidos").innerHTML = `<tr><td colspan="8" class="vacio">Todavía no hay pedidos.</td></tr>`;
   else $("pedidos").innerHTML = pedidos.datos.slice().reverse().map((p) => `<tr><td class="mono">${p.id}</td>
     <td>${escapar(p.usuario.nombre)} <span class="tenue">${p.usuario.id}</span></td>
     <td>${escapar(p.producto.nombre)} <span class="tenue">${p.producto.id}</span></td>
     <td class="num">${p.cantidad}</td><td class="num">${pesos.format(p.precio_unitario)}</td>
-    <td class="num"><b>${pesos.format(p.total)}</b></td><td class="mono tenue">${p.fecha_utc.replace("T", " ").slice(0, 19)}</td></tr>`).join("");
+    <td class="num"><b>${pesos.format(p.total)}</b></td><td class="tenue">${escapar(p.atendido_por || "")}</td>
+    <td class="mono tenue">${p.fecha_utc.replace("T", " ").slice(0, 19)}</td></tr>`).join("");
 }
 
 /* 04. Gestión (CRUD): un formulario por servicio, con data-servicio="usuarios" o "productos" */
@@ -647,13 +703,18 @@ $("form-concurrencia").addEventListener("submit", async (evento) => {
 $("recargar").addEventListener("click", cargarDatos);
 
 (async function iniciar() {
-  try { configuracion = await (await fetch("/api/configuracion")).json(); } catch { configuracion = {}; }
-  dibujarServicios();
+  // La entrada propia primero; después las de los otros computadores.
+  try {
+    const configuracion = await (await fetch("/api/configuracion")).json();
+    const otras = (configuracion.entradas || []).map((e) => e.replace(/\/$/, "")).filter((e) => e !== location.origin);
+    entradas = [location.origin, ...otras];
+  } catch { entradas = [""]; }
+  mostrarEntrada();
   dibujarPruebas();
   mostrarRecorrido();
-  revisarSalud();
+  revisarCluster();
   cargarDatos();
-  setInterval(revisarSalud, 3000);
+  setInterval(revisarCluster, 3000);
 })();
 </script>
 </body>

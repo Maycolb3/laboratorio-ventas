@@ -1,50 +1,103 @@
-# Define los tres servicios, cómo se construyen y la red que los une.
+# Sistema completo en UN computador, simulando un clúster: tres nodos de la
+# base de datos y dos réplicas de cada servicio. Sirve para probar la
+# persistencia y la tolerancia a fallos sin necesitar tres equipos.
+# Para repartirlo en tres computadores se usa docker-compose.nodo.yml (ver README).
+
+x-rqlite: &rqlite
+  image: rqlite/rqlite:10.6.0
+  # Los tres nodos se buscan entre sí y eligen un líder cuando están los tres.
+  command: -bootstrap-expect 3 -join rqlite-1:4002,rqlite-2:4002,rqlite-3:4002
+  restart: unless-stopped
+  networks: [red_ventas]
+
+x-servicio: &servicio
+  restart: unless-stopped
+  depends_on: [rqlite-1, rqlite-2, rqlite-3]
+  networks: [red_ventas]
+
+# Cada servicio conoce todas las réplicas de los demás, la propia primero.
+x-entorno: &entorno
+  DB_URLS: http://rqlite-1:4001,http://rqlite-2:4001,http://rqlite-3:4001
+  USUARIOS_URLS: http://usuarios-1:8001,http://usuarios-2:8001
+  PRODUCTOS_URLS: http://productos-1:8002,http://productos-2:8002
+  PEDIDOS_URLS: http://pedidos-1:8000,http://pedidos-2:8000
+
 services:
-  usuarios:
-    build: ./usuarios
-    container_name: servicio-usuarios
-    ports:
-      - "8001:8001"   # puerto_del_equipo:puerto_del_contenedor
-    networks:
-      - red_ventas
+  rqlite-1:
+    <<: *rqlite
+    container_name: bd-1
+    environment: {NODE_ID: rqlite-1, HTTP_ADV_ADDR: "rqlite-1:4001", RAFT_ADV_ADDR: "rqlite-1:4002"}
+    volumes: [datos-1:/rqlite/file]   # los datos quedan en disco: sobreviven a reinicios
+    ports: ["4001:4001"]              # para consultar la base desde el navegador
+  rqlite-2:
+    <<: *rqlite
+    container_name: bd-2
+    environment: {NODE_ID: rqlite-2, HTTP_ADV_ADDR: "rqlite-2:4001", RAFT_ADV_ADDR: "rqlite-2:4002"}
+    volumes: [datos-2:/rqlite/file]
+  rqlite-3:
+    <<: *rqlite
+    container_name: bd-3
+    environment: {NODE_ID: rqlite-3, HTTP_ADV_ADDR: "rqlite-3:4001", RAFT_ADV_ADDR: "rqlite-3:4002"}
+    volumes: [datos-3:/rqlite/file]
 
-  productos:
-    build: ./productos
-    container_name: servicio-productos
-    ports:
-      - "8002:8002"
-    networks:
-      - red_ventas
+  usuarios-1:
+    <<: *servicio
+    build: {context: ., dockerfile: usuarios/Dockerfile}
+    image: ventas-usuarios
+    container_name: servicio-usuarios-1
+    ports: ["8001:8001"]   # la réplica 1 se publica para las pruebas desde PowerShell
+    environment: {<<: *entorno, NODO: "réplica 1"}
+  usuarios-2:
+    <<: *servicio
+    image: ventas-usuarios
+    container_name: servicio-usuarios-2
+    environment: {<<: *entorno, NODO: "réplica 2"}
 
-  pedidos:
-    build: ./pedidos
-    container_name: servicio-pedidos
-    ports:
-      - "8000:8000"
-    environment:
-      # Se usan los nombres de servicio, NO localhost: dentro de un contenedor,
-      # localhost es el propio contenedor de pedidos.
-      USUARIOS_URL: http://usuarios:8001
-      PRODUCTOS_URL: http://productos:8002
-    depends_on:
-      - usuarios
-      - productos
-    networks:
-      - red_ventas
+  productos-1:
+    <<: *servicio
+    build: {context: ., dockerfile: productos/Dockerfile}
+    image: ventas-productos
+    container_name: servicio-productos-1
+    ports: ["8002:8002"]
+    environment: {<<: *entorno, NODO: "réplica 1"}
+  productos-2:
+    <<: *servicio
+    image: ventas-productos
+    container_name: servicio-productos-2
+    environment: {<<: *entorno, NODO: "réplica 2"}
 
-  interfaz:
-    build: ./interfaz
-    container_name: servicio-interfaz
-    ports:
-      - "8080:8080"   # abrir http://localhost:8080 en el navegador
-    environment:
-      USUARIOS_URL: http://usuarios:8001
-      PRODUCTOS_URL: http://productos:8002
-      PEDIDOS_URL: http://pedidos:8000
-    depends_on:
-      - pedidos
-    networks:
-      - red_ventas
+  pedidos-1:
+    <<: *servicio
+    build: {context: ., dockerfile: pedidos/Dockerfile}
+    image: ventas-pedidos
+    container_name: servicio-pedidos-1
+    ports: ["8000:8000"]
+    environment: {<<: *entorno, NODO: "réplica 1"}
+  pedidos-2:
+    <<: *servicio
+    image: ventas-pedidos
+    container_name: servicio-pedidos-2
+    environment: {<<: *entorno, NODO: "réplica 2"}
+
+  # Dos entradas web: si se detiene una, la página abierta sigue por la otra.
+  interfaz-1:
+    <<: *servicio
+    build: {context: ., dockerfile: interfaz/Dockerfile}
+    image: ventas-interfaz
+    container_name: servicio-interfaz-1
+    ports: ["8080:8080"]   # abrir http://localhost:8080
+    environment: {<<: *entorno, NODO: "entrada 1", ENTRADAS: "http://localhost:8080,http://localhost:8081"}
+  interfaz-2:
+    <<: *servicio
+    image: ventas-interfaz
+    container_name: servicio-interfaz-2
+    ports: ["8081:8080"]
+    environment: {<<: *entorno, NODO: "entrada 2", ENTRADAS: "http://localhost:8080,http://localhost:8081"}
+
+volumes:
+  datos-1:
+  datos-2:
+  datos-3:
 
 networks:
   red_ventas:
