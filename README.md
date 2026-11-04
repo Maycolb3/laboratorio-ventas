@@ -43,8 +43,10 @@ En el despliegue real, **los tres computadores son iguales**: cada uno corre un 
 
 ```mermaid
 flowchart LR
-    N["Navegador"] -- "enlace público<br/>(Tailscale Funnel)" --> IA
-    N -. "si cae A, la página<br/>cambia sola de entrada" .-> IB
+    N["Navegador"] -- "un solo enlace<br/>(Cloudflare Tunnel)" --> CF{{"Cloudflare"}}
+    CF -- "conector A" --> IA
+    CF -. "si cae A, envía<br/>las visitas a B o C" .-> IB
+    CF -.-> IC
     subgraph A["Computador A"]
         IA["interfaz :8080"] --> PA["pedidos :8000"]
         PA --> UA["usuarios :8001"]
@@ -112,7 +114,8 @@ Códigos de respuesta de `POST /pedidos`: 201 pedido creado, 400 datos inválido
 - **Lista de réplicas.** Cada servicio conoce todas las réplicas de los demás (`USUARIOS_URLS`, `PRODUCTOS_URLS`, `PEDIDOS_URLS`, `DB_URLS`): primero la de su computador y luego las de los otros. Si una no responde en 1.5 s, prueba la siguiente.
 - **Memoria de réplicas caídas.** La réplica que falló pasa al final de la lista durante 15 s. Así, solo la primera petición después de una caída paga la espera.
 - **Sin descuentos dobles.** Cada descuento lleva un identificador de operación único. Si pedidos reintenta en otra réplica de productos, la operación no se descuenta dos veces. Si no se sabe si se aplicó, pedidos la revierte (`POST /operaciones/<id>/revertir`), y revertir dos veces tampoco suma unidades de más.
-- **Entrada web redundante.** Cada computador publica su interfaz (Tailscale Funnel). La página conoce las tres entradas (`ENTRADAS`): si la suya deja de responder, sigue sola por otra y lo indica arriba a la derecha.
+- **Un solo enlace público (Cloudflare Tunnel).** Los tres computadores corren el mismo túnel. Cloudflare envía cada visita a un conector vivo: si cae un computador, el enlace sigue funcionando con los otros dos, sin que nadie cambie de dirección (paso 11). El conector comparte la red con la interfaz, así que si solo cae la interfaz de un equipo, ese conector también se desconecta.
+- **Alternativa con un enlace por computador (Tailscale Funnel).** La página conoce las tres entradas (`ENTRADAS`): si la suya deja de responder, sigue sola por otra y lo indica arriba a la derecha. Solo sirve para una página que ya estaba abierta.
 
 ## Estructura de archivos
 
@@ -376,15 +379,52 @@ Los tres computadores usan **el mismo archivo**, `docker-compose.nodo.yml`. Cada
    docker compose -f docker-compose.nodo.yml up -d --build
    ```
 
-5. **Publicar la interfaz** en cada computador:
+5. **Publicar la interfaz** con un solo enlace para todo el sistema: ver el paso 11 (Cloudflare Tunnel). Alternativa sin dominio, con un enlace por computador:
 
    ```powershell
    tailscale funnel --bg 8080
    ```
 
-   Copiar los tres enlaces `https://…ts.net` en `ENTRADAS` del `.env` de cada equipo y aplicar el cambio con `docker compose -f docker-compose.nodo.yml up -d`.
+   En ese caso, copiar los tres enlaces `https://…ts.net` en `ENTRADAS` del `.env` de cada equipo y aplicar el cambio con `docker compose -f docker-compose.nodo.yml up -d`.
 
-**Prueba de la tolerancia a fallos:** abrir el enlace de C, apagar Docker o el computador C completo, y seguir comprando. La página cambia sola a la entrada de A o B, la base sigue con 2 de 3 nodos y los pedidos los atienden las réplicas de A y B. Al encender C de nuevo, su nodo se pone al día solo con los datos que se escribieron mientras estaba apagado.
+**Prueba de la tolerancia a fallos:** abrir el enlace, apagar Docker o el computador C completo, y seguir comprando. El enlace sigue respondiendo con A o B, la base sigue con 2 de 3 nodos y los pedidos los atienden las réplicas de A y B. En la interfaz, el nodo "Interfaz" del diagrama muestra qué computador está atendiendo. Al encender C de nuevo, su nodo se pone al día solo con los datos que se escribieron mientras estaba apagado.
+
+## Paso 11. Un solo enlace con Cloudflare Tunnel
+
+Un túnel de Cloudflare puede tener varios **conectores** (réplicas), hasta 25. Si los tres computadores corren el mismo túnel, Cloudflare envía cada visita a un conector vivo. Así hay **una sola dirección** para todo el sistema y sigue funcionando aunque se caiga cualquiera de los tres. El conector ya está en `docker-compose.nodo.yml` (servicio `tunel`) y arranca con el resto.
+
+Se necesita una cuenta gratuita de Cloudflare y un dominio propio agregado a ella. El GitHub Student Pack incluye dominios gratis por un año; si no, un `.xyz` o `.site` cuesta entre 1 y 10 dólares el primer año.
+
+Lo hace **una sola persona**, una sola vez:
+
+1. Agregar el dominio a Cloudflare: **Add a domain** → plan **Free** → cambiar los *nameservers* del dominio, en la página donde se compró, por los dos que muestra Cloudflare. Esperar a que el dominio aparezca como **Active**.
+2. Crear el túnel: **Zero Trust** → **Networks** → **Tunnels** → **Create a tunnel** → **Cloudflared** → nombre `ventas`.
+3. En la pantalla de instalación, copiar el **token**: es el texto largo que empieza por `eyJ`, al final del comando de ejemplo. No hace falta instalar nada: el conector corre en Docker.
+4. **Public Hostname** → subdominio `ventas`, dominio el propio, **Service** `HTTP` y URL `localhost:8080` → **Save tunnel**.
+5. Pasar el token al grupo por un canal privado. Quien tiene el token puede conectar equipos al túnel.
+
+En **cada computador**:
+
+1. Agregar al `.env`:
+
+   ```ini
+   COMPOSE_PROFILES=tunel
+   TUNNEL_TOKEN=eyJ...el-mismo-token-en-los-tres...
+   ENTRADAS=https://ventas.tudominio.com
+   ```
+
+2. Aplicar el cambio:
+
+   ```powershell
+   docker compose -f docker-compose.nodo.yml up -d
+   docker logs tunel
+   ```
+
+   En el registro debe aparecer `Registered tunnel connection` (cuatro veces). En Cloudflare, el túnel `ventas` pasa a **Healthy** y en **Connectors** aparecen los tres computadores.
+
+3. Si estaba activo, apagar el enlace de Tailscale, que ya no se usa: `tailscale funnel --bg off`. Tailscale sigue siendo necesario para que los computadores se comuniquen entre sí.
+
+**Prueba:** abrir `https://ventas.tudominio.com`, mirar en el diagrama qué computador atiende (nodo "Interfaz") y apagar ese computador con `docker compose -f docker-compose.nodo.yml stop`. En pocos segundos la misma dirección responde desde otro computador. Funciona también para alguien que abre el enlace por primera vez después de la caída.
 
 ---
 
@@ -423,3 +463,5 @@ En la salida de `curl`, las tildes aparecen como `í`, `á`, etc. Es la forma es
 | Todas las compras responden 503 "La base de datos no está disponible" | Quedan menos de 2 nodos de la base | Encender otro nodo; el sistema se recupera solo |
 | Se quieren borrar todos los datos y empezar de cero | Los datos persisten en volúmenes | `docker compose down -v` y luego `docker compose up -d` |
 | Los cambios en `app.py` no se reflejan | La imagen no se reconstruyó | `docker compose up -d --build` |
+| El enlace de Cloudflare muestra el error 1033 o 530 | Ningún conector está conectado | `docker logs tunel` en cada equipo. Revisar que `COMPOSE_PROFILES=tunel` y el `TUNNEL_TOKEN` estén en el `.env` y que el contenedor `tunel` aparezca en `docker ps` |
+| El enlace de Cloudflare muestra 502 | El conector está, pero no llega a la interfaz | En el Public Hostname del túnel, el servicio debe ser `http://localhost:8080` |

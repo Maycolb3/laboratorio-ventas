@@ -645,15 +645,25 @@ try { abrirPestana(localStorage.getItem("pestana") || "pedido"); } catch { abrir
 let entradas = [""];   // "" = la misma dirección desde la que se abrió la página
 let actual = 0;
 
+// Respuestas del túnel público cuando el computador de esa entrada no contesta
+// (502 Tailscale/Cloudflare, 530 Cloudflare sin conector disponible).
+const SIN_COMPUTADOR = [502, 530];
+
 async function pedir(ruta, opciones) {
-  for (let intento = 0; intento < entradas.length; intento++) {
+  // Con una sola entrada (un enlace con varios conectores, como Cloudflare
+  // Tunnel) se reintenta: el túnel envía el reintento a otro computador vivo.
+  const intentos = Math.max(entradas.length, 3);
+  for (let intento = 0; intento < intentos; intento++) {
     try {
       const respuesta = await fetch(`${entradas[actual]}${ruta}`, opciones);
-      // 502 = el túnel público llegó al computador, pero ahí no hay interfaz.
-      if (respuesta.status !== 502 || entradas.length === 1) return respuesta;
+      if (!SIN_COMPUTADOR.includes(respuesta.status) || intento === intentos - 1) return respuesta;
     } catch { /* la entrada no responde: se prueba la siguiente */ }
-    actual = (actual + 1) % entradas.length;
-    mostrarEntrada();
+    if (entradas.length > 1) {
+      actual = (actual + 1) % entradas.length;
+      mostrarEntrada();
+    } else {
+      await new Promise((r) => setTimeout(r, 700));
+    }
   }
   throw new Error("ninguna entrada responde");
 }
