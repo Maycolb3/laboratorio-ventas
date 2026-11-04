@@ -74,16 +74,18 @@
   .bloque-cabeza p { margin: 3px 0 0; font-size: 13px; color: var(--suave); max-width: 560px; }
   .suave { background: color-mix(in srgb, var(--c) var(--tinte), var(--superficie)); border-color: color-mix(in srgb, var(--c) 20%, var(--linea)); }
 
-  .b-arquitectura { grid-column: span 8; }
-  .b-bd { grid-column: span 4; --c: var(--bd); }
-  .b-inventario { grid-column: span 7; --c: var(--productos); }
-  .b-reparto { grid-column: span 5; --c: var(--pedidos); }
+  .b-arquitectura { grid-column: span 8; display: flex; flex-direction: column; }
+  .b-arquitectura .lienzo { flex: 1; display: flex; align-items: center; }
+  .lateral { grid-column: span 4; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .b-bd { --c: var(--bd); padding: 18px 20px; }
+  .b-inventario { --c: var(--productos); flex: 1; }
   .b-mesa { grid-column: span 12; padding: 0; overflow: hidden; }
   .b-pedidos { grid-column: span 7; }
   .b-registro { grid-column: span 5; }
   @media (max-width: 1100px) {
-    .b-arquitectura, .b-bd, .b-mesa { grid-column: span 12; }
-    .b-inventario, .b-reparto { grid-column: span 6; }
+    .b-arquitectura, .lateral, .b-mesa { grid-column: span 12; }
+    .lateral { flex-direction: row; flex-wrap: wrap; }
+    .lateral > * { flex: 1 1 300px; }
     .b-pedidos, .b-registro { grid-column: span 12; }
   }
   @media (max-width: 720px) { .bento > * { grid-column: span 12 !important; } }
@@ -107,49 +109,33 @@
   .topologia .nombre { font-size: 15px; font-weight: 700; }
   .topologia .puerto, .topologia .cuenta { font: 10.5px var(--mono); fill: var(--tenue); }
   .topologia .cuenta { font-size: 11px; }
-  .topologia .p-ok { fill: var(--ok); } .topologia .p-mal { fill: none; stroke: var(--error); stroke-width: 1.6; }
-  .topologia .p-lider { stroke: var(--oro); stroke-width: 3; }
+  .topologia .estado-punto { fill: var(--ok); }
+  .topologia .nodo.abajo .estado-punto { fill: var(--error); }
+  .topologia .nodo.abajo .cuenta { fill: var(--error); }
   .topologia .paquete { filter: drop-shadow(0 0 5px currentColor); }
 
-  .replicas { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
-  @media (max-width: 720px) { .replicas { grid-template-columns: minmax(0, 1fr); } }
-  .grupo h4 { font: 700 12.5px var(--sans); display: flex; align-items: center; gap: 7px; margin-bottom: 6px; }
-  .grupo h4 i { width: 10px; height: 10px; border-radius: 3px; background: var(--c); }
-  .grupo h4 span { margin-left: auto; font: 500 11px var(--mono); color: var(--tenue); }
-  .replica { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0 8px; align-items: center; padding: 7px 10px; margin-bottom: 6px;
-             border-radius: 10px; background: var(--hundido); border: 1px solid transparent; transition: border-color .25s, box-shadow .25s; }
-  .replica b { font-size: 12.5px; font-weight: 600; }
-  .replica small { grid-column: 2; font: 10.5px var(--mono); color: var(--tenue); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .replica.arriba .punto { background: var(--ok); }
-  .replica.abajo { background: transparent; border: 1px dashed color-mix(in srgb, var(--error) 60%, transparent); }
-  .replica.abajo .punto { background: var(--error); }
-  .replica.abajo b { color: var(--error); text-decoration: line-through; }
-  .replica.golpe { border-color: var(--c); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 22%, transparent); }
-  .pie-arquitectura { margin: 8px 0 0; font-size: 12.5px; color: var(--suave); }
-
-  /* Base de datos: consenso Raft */
-  .raft { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 16px; align-items: center; }
-  @media (max-width: 420px) { .raft { grid-template-columns: minmax(0, 1fr); } }
-  .raft svg { width: 100%; height: auto; overflow: visible; }
-  .raft .enlace { stroke: color-mix(in srgb, var(--bd) 35%, transparent); stroke-width: 1.5; }
-  .raft .enlace.roto { stroke: var(--error); stroke-dasharray: 3 4; opacity: .5; }
-  .raft circle.ok { fill: var(--bd); }
-  .raft circle.mal { fill: var(--superficie); stroke: var(--error); stroke-width: 2; stroke-dasharray: 4 3; }
-  .raft circle.lider { stroke: var(--oro); stroke-width: 4; }
-  .raft text { font: 600 10px var(--mono); fill: var(--suave); text-anchor: middle; }
-  .raft text.corona { font-size: 13px; fill: var(--oro); }
-  .raft-estado { font: 700 17px/1.25 var(--display); }
-  .raft-lista { list-style: none; margin: 8px 0 10px; padding: 0; font-size: 12.5px; display: grid; gap: 3px; }
-  .raft-lista li { display: flex; align-items: center; gap: 7px; }
-  .raft-lista li.mal { color: var(--error); }
-  .raft-lista em { font-style: normal; margin-left: auto; font: 500 11px var(--mono); color: var(--tenue); }
+  /* Base de datos: nodos vivos y líder */
+  .bd-cabeza { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+  .bd-cabeza h3 { font-size: 18px; }
+  .bd-estado { font: 600 12px var(--sans); color: var(--ok); white-space: nowrap; }
+  .bd-estado.parcial { color: var(--aviso); } .bd-estado.abajo { color: var(--error); }
+  .nodos-bd { list-style: none; margin: 0 0 10px; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .nodos-bd li { display: grid; justify-items: center; gap: 2px; padding: 9px 4px 8px; border-radius: 12px; text-align: center;
+                 background: var(--superficie); border: 1px solid color-mix(in srgb, var(--bd) 25%, var(--linea)); }
+  .nodos-bd b { font: 700 18px/1.1 var(--display); display: flex; align-items: center; gap: 6px; }
+  .nodos-bd small { font: 500 11px var(--sans); color: var(--suave); }
+  .nodos-bd li.lider { border: 2px solid var(--oro); background: color-mix(in srgb, var(--oro) 14%, var(--superficie)); }
+  .nodos-bd li.lider small { color: var(--tinta); font-weight: 700; }
+  .nodos-bd li.mal { border-style: dashed; border-color: color-mix(in srgb, var(--error) 60%, transparent); background: transparent; }
+  .nodos-bd li.mal b, .nodos-bd li.mal small { color: var(--error); }
+  .nodos-bd .punto { background: var(--ok); } .nodos-bd .mal .punto { background: var(--error); }
   .tramos { display: flex; gap: 4px; margin-bottom: 4px; }
   .tramos i { flex: 1; height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--bd) 18%, transparent); }
   .tramos i.lleno { background: var(--bd); }
-  .mayoria-texto { font-size: 11.5px; color: var(--suave); }
+  .mayoria-texto { font-size: 11.5px; color: var(--suave); margin: 4px 0 0; }
 
   /* Inventario */
-  .inventario { list-style: none; margin: 0; padding: 0 4px 0 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; max-height: 210px; overflow: auto; }
+  .inventario { list-style: none; margin: 0; padding: 0 4px 0 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; max-height: 260px; overflow: auto; }
   @media (max-width: 560px) { .inventario { grid-template-columns: minmax(0, 1fr); } }
   .inventario li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 10px; font-size: 13px; }
   .inventario .nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -158,18 +144,6 @@
   .inventario .barra i { display: block; height: 100%; border-radius: 4px; background: var(--productos); transition: width .5s ease; }
   .inventario li.bajo .barra i { background: var(--aviso); }
   .inventario li.agotado .valor { color: var(--error); }
-
-  /* Reparto entre réplicas de pedidos (dona) */
-  .reparto { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 18px; align-items: center; }
-  .dona { width: 130px; height: 130px; }
-  .dona circle { fill: none; stroke-width: 16; }
-  .dona .fondo-dona { stroke: color-mix(in srgb, var(--pedidos) 14%, transparent); }
-  .dona text { font: 700 22px var(--display); fill: var(--tinta); text-anchor: middle; }
-  .dona text.sub { font: 500 10px var(--sans); fill: var(--suave); }
-  .leyenda { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; font-size: 13px; }
-  .leyenda li { display: flex; align-items: center; gap: 8px; }
-  .leyenda i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
-  .leyenda b { margin-left: auto; font: 600 12px var(--mono); }
 
   /* ---------- Mesa de trabajo ---------- */
   .mesa-cabeza { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding: 18px 24px; border-bottom: 1px solid var(--linea); }
@@ -333,7 +307,7 @@
       <div class="bloque-cabeza">
         <div>
           <h2>Arquitectura en vivo</h2>
-          <p>Cada servicio corre en varias réplicas y la base de datos en tres nodos. Apague cualquiera: el sistema sigue con los demás. Al crear un pedido, su recorrido viaja por el diagrama.</p>
+          <p>Servicios del sistema y su estado. Al crear un pedido, su recorrido viaja por el diagrama.</p>
         </div>
         <span class="vivo"><span class="punto"></span><span id="ultima-revision">en vivo</span></span>
       </div>
@@ -348,62 +322,47 @@
           <g class="nodo" id="n-interfaz" style="--c: var(--interfaz)" transform="translate(20 118)">
             <rect class="caja" width="132" height="64" rx="14"/><rect class="franja" x="14" y="15" width="5" height="16" rx="2.5"/>
             <text class="nombre" x="27" y="28">Interfaz</text>
-            <text class="cuenta" x="16" y="50" id="t-entrada">entrada</text><text class="puerto" x="120" y="50" text-anchor="end">:8080</text>
+            <circle class="estado-punto" cx="20" cy="46" r="4.6"/><text class="cuenta" x="30" y="50">en línea</text>
           </g>
           <g class="nodo" id="n-pedidos" style="--c: var(--pedidos)" transform="translate(200 118)">
             <rect class="caja" width="132" height="64" rx="14"/><rect class="franja" x="14" y="15" width="5" height="16" rx="2.5"/>
             <text class="nombre" x="27" y="28">Pedidos</text>
-            <g class="puntos"></g><text class="cuenta" x="82" y="50" text-anchor="end"></text><text class="puerto" x="120" y="50" text-anchor="end">:8000</text>
+            <circle class="estado-punto" cx="20" cy="46" r="4.6"/><text class="cuenta" x="30" y="50">en línea</text>
           </g>
           <g class="nodo" id="n-usuarios" style="--c: var(--usuarios)" transform="translate(390 28)">
             <rect class="caja" width="132" height="64" rx="14"/><rect class="franja" x="14" y="15" width="5" height="16" rx="2.5"/>
             <text class="nombre" x="27" y="28">Usuarios</text>
-            <g class="puntos"></g><text class="cuenta" x="82" y="50" text-anchor="end"></text><text class="puerto" x="120" y="50" text-anchor="end">:8001</text>
+            <circle class="estado-punto" cx="20" cy="46" r="4.6"/><text class="cuenta" x="30" y="50">en línea</text>
           </g>
           <g class="nodo" id="n-productos" style="--c: var(--productos)" transform="translate(390 208)">
             <rect class="caja" width="132" height="64" rx="14"/><rect class="franja" x="14" y="15" width="5" height="16" rx="2.5"/>
             <text class="nombre" x="27" y="28">Productos</text>
-            <g class="puntos"></g><text class="cuenta" x="82" y="50" text-anchor="end"></text><text class="puerto" x="120" y="50" text-anchor="end">:8002</text>
+            <circle class="estado-punto" cx="20" cy="46" r="4.6"/><text class="cuenta" x="30" y="50">en línea</text>
           </g>
           <g class="nodo" id="n-bd" style="--c: var(--bd)" transform="translate(556 118)">
             <rect class="caja" width="124" height="64" rx="14"/><rect class="franja" x="14" y="15" width="5" height="16" rx="2.5"/>
             <text class="nombre" x="27" y="28">rqlite</text>
-            <g class="puntos"></g><text class="cuenta" x="80" y="50" text-anchor="end"></text><text class="puerto" x="115" y="50" text-anchor="end">:4001</text>
+            <circle class="estado-punto" cx="20" cy="46" r="4.6"/><text class="cuenta" x="30" y="50">en línea</text>
           </g>
         </svg>
       </div>
-      <div class="replicas" id="servicios"></div>
-      <p class="pie-arquitectura" id="pie-arquitectura">La réplica que atiende cada petición de esta página se resalta con el color de su servicio.</p>
     </section>
 
-    <!-- Base de datos -->
-    <section class="bloque b-bd suave">
-      <div class="bloque-cabeza"><div><h3>Base de datos · Raft</h3><p>Tres copias; un líder ordena las escrituras.</p></div></div>
-      <div class="raft">
-        <svg viewBox="0 0 150 130" id="raft" aria-label="Nodos de la base de datos"></svg>
-        <div>
-          <div class="raft-estado" id="raft-estado">—</div>
-          <ul class="raft-lista" id="raft-lista"></ul>
-          <div class="tramos" id="tramos"></div>
-          <div class="mayoria-texto" id="mayoria-texto"></div>
-        </div>
-      </div>
-    </section>
+    <div class="lateral">
+      <!-- Base de datos -->
+      <section class="bloque b-bd suave">
+        <div class="bd-cabeza"><h3>Base de datos</h3><span class="bd-estado" id="raft-estado">—</span></div>
+        <ul class="nodos-bd" id="raft-lista"></ul>
+        <div class="tramos" id="tramos"></div>
+        <p class="mayoria-texto" id="mayoria-texto"></p>
+      </section>
 
-    <!-- Inventario -->
-    <section class="bloque b-inventario suave">
-      <div class="bloque-cabeza"><div><h3>Inventario</h3><p>Existencias en tiempo real; bajan con cada pedido aceptado.</p></div><span class="rotulo" id="kpi-productos"></span></div>
-      <ul class="inventario" id="inventario"><li class="tenue">Cargando…</li></ul>
-    </section>
-
-    <!-- Reparto -->
-    <section class="bloque b-reparto suave">
-      <div class="bloque-cabeza"><div><h3>¿Quién atendió?</h3><p>Pedidos procesados por cada réplica de pedidos.</p></div></div>
-      <div class="reparto">
-        <svg class="dona" viewBox="0 0 130 130" id="dona" aria-hidden="true"></svg>
-        <ul class="leyenda" id="reparto-leyenda"><li class="tenue">Todavía no hay pedidos.</li></ul>
-      </div>
-    </section>
+      <!-- Inventario -->
+      <section class="bloque b-inventario suave">
+        <div class="bloque-cabeza"><div><h3>Inventario</h3><p>Existencias en tiempo real; bajan con cada pedido aceptado.</p></div><span class="rotulo" id="kpi-productos"></span></div>
+        <ul class="inventario" id="inventario"><li class="tenue">Cargando…</li></ul>
+      </section>
+    </div>
 
     <!-- Mesa de trabajo -->
     <section class="bloque b-mesa">
@@ -459,7 +418,7 @@
 
       <div class="panel" id="panel-concurrencia" role="tabpanel" hidden>
         <div class="panel-intro">
-          <p>Lanza muchos pedidos al mismo tiempo (usuario U01) sobre un producto. Productos verifica y descuenta en una sola transacción de la base de datos: aunque las compras lleguen a réplicas distintas, solo se aceptan las unidades que hay y el inventario nunca queda negativo.</p>
+          <p>Lanza muchos pedidos al mismo tiempo (usuario U01) sobre un producto. Productos verifica y descuenta en una sola transacción de la base de datos: aunque lleguen al mismo tiempo, solo se aceptan las unidades que hay y el inventario nunca queda negativo.</p>
         </div>
         <form class="form-conc" id="form-concurrencia">
           <label><span>Producto</span><input name="producto" list="lista-productos" value="P02" autocomplete="off"></label>
@@ -524,11 +483,11 @@
     <!-- Pedidos registrados -->
     <section class="bloque b-pedidos">
       <div class="bloque-cabeza">
-        <div><h3>Pedidos registrados</h3><p>Guardados en la base de datos distribuida. "Atendió" indica qué réplica de pedidos procesó cada compra.</p></div>
+        <div><h3>Pedidos registrados</h3><p>Guardados en la base de datos distribuida.</p></div>
         <button id="recargar">Recargar datos</button>
       </div>
       <div class="tabla"><table>
-        <thead><tr><th>ID</th><th>Usuario</th><th>Producto</th><th class="num">Cant.</th><th class="num">Precio unit.</th><th class="num">Total</th><th>Atendió</th><th>Fecha UTC</th></tr></thead>
+        <thead><tr><th>ID</th><th>Usuario</th><th>Producto</th><th class="num">Cant.</th><th class="num">Precio unit.</th><th class="num">Total</th><th>Fecha UTC</th></tr></thead>
         <tbody id="pedidos"></tbody>
       </table></div>
     </section>
@@ -536,7 +495,7 @@
     <!-- Registro -->
     <section class="bloque b-registro">
       <div class="bloque-cabeza">
-        <div><h3>Registro de solicitudes</h3><p>Cada petición de esta página y la dirección real que la atendió: contenedor o IP del computador.</p></div>
+        <div><h3>Registro de solicitudes</h3><p>Cada petición que hace esta página, el servicio que la atendió y el tiempo de respuesta.</p></div>
         <button id="limpiar-registro">Limpiar</button>
       </div>
       <div class="contador" id="total-registro">0 solicitudes</div>
@@ -549,7 +508,7 @@
     <span><i style="--c: var(--productos)"></i>productos :8002</span>
     <span><i style="--c: var(--pedidos)"></i>pedidos :8000</span>
     <span><i style="--c: var(--bd)"></i>base de datos rqlite :4001</span>
-    <span>interfaz :8080 · reenvía cada petición a la primera réplica que responda</span>
+    <span>interfaz :8080</span>
   </footer>
 </div>
 
@@ -588,12 +547,10 @@ const idHtml = (id, tipo) => `<span class="id ${tipo}">${escapar(id)}</span>`;
 const color = (nombre) => getComputedStyle(document.documentElement).getPropertyValue(`--${nombre}`).trim();
 
 /* Tema claro / oscuro */
-let ultimosPedidos = null;
 $("tema").addEventListener("click", () => {
   const tema = document.documentElement.dataset.tema === "oscuro" ? "claro" : "oscuro";
   document.documentElement.dataset.tema = tema;
   try { localStorage.setItem("tema", tema); } catch {}
-  if (ultimosPedidos) dibujarReparto(ultimosPedidos);   // la dona usa colores calculados
 });
 
 /* Pestañas de la mesa de trabajo */
@@ -647,25 +604,15 @@ function mostrarEntrada() {
     : `<span class="punto parcial"></span><span>entrada: ${escapar(nombre)} · cambió automáticamente</span>`;
 }
 
-/* Resaltado de la réplica y del nodo del diagrama que atendió una petición */
-let replicaServicio = {};   // url de réplica -> servicio
-const golpes = {};
+/* El nodo del diagrama del servicio que atendió una petición se ilumina */
 function iluminarNodo(servicio, ms = 900) {
   const nodo = $(`n-${servicio}`);
   if (!nodo) return;
   nodo.classList.add("golpe");
   setTimeout(() => nodo.classList.remove("golpe"), ms);
 }
-function marcarGolpe(servicio, destino) {
-  iluminarNodo(servicio);
-  const base = Object.keys(replicaServicio).find((url) => destino.startsWith(url));
-  if (!base) return;
-  golpes[base] = Date.now();
-  document.querySelectorAll(".replica[data-url]").forEach((el) => {
-    if (el.dataset.url === base) { el.classList.add("golpe"); setTimeout(() => el.classList.remove("golpe"), 1200); }
-  });
-}
-const recienGolpeada = (url) => Date.now() - (golpes[url] || 0) < 1200;
+// Fachada: hacia afuera solo se muestra la ruta, no qué réplica ni qué computador atendió.
+const rutaPublica = (destino) => { const r = sinEsquema(destino); const i = r.indexOf("/"); return i < 0 ? r : r.slice(i); };
 
 async function llamar(servicio, ruta, opciones = {}, registrar = true) {
   const metodo = opciones.method || "GET";
@@ -682,7 +629,7 @@ async function llamar(servicio, ruta, opciones = {}, registrar = true) {
     datos = { error: "No responde ninguna entrada de la interfaz web (puerto 8080)." };
   }
   if (registrar) agregarRegistro(metodo, destino, codigo, ms, origen);
-  if (origen !== "interfaz") marcarGolpe(origen, destino);
+  if (origen !== "interfaz") iluminarNodo(origen);
   return { metodo, codigo, datos, destino, origen, ms };
 }
 
@@ -727,14 +674,10 @@ let totalRegistro = 0;
 function agregarRegistro(metodo, destino, codigo, ms, origen) {
   const lista = $("registro");
   if (lista.querySelector(".vacio")) lista.innerHTML = "";
-  const limpio = sinEsquema(destino);
-  const corte = limpio.indexOf("/");
-  const host = corte < 0 ? limpio : limpio.slice(0, corte), ruta = corte < 0 ? "" : limpio.slice(corte);
   const item = document.createElement("li");
   item.className = `s-${origen}`;
-  item.title = destino;
   item.innerHTML = `<span class="hora">${hora()}</span><span class="verbo">${metodo}</span>
-    <span class="destino"><em>${escapar(host)}</em>${escapar(ruta)}</span>
+    <span class="destino"><em>${escapar(origen)}</em> ${escapar(rutaPublica(destino))}</span>
     <span class="fin">${codigoHtml(codigo)}<span class="ms">${ms} ms</span></span>`;
   lista.prepend(item);
   while (lista.children.length > MAXIMO_REGISTRO) lista.lastElementChild.remove();
@@ -750,65 +693,27 @@ $("limpiar-registro").addEventListener("click", () => {
   $("registro").innerHTML = `<li class="vacio">Sin solicitudes todavía.</li>`;
 });
 
-/* Estado del clúster: diagrama, réplicas y base de datos */
-const estadoClase = (activos, total, enPie) => activos === total ? "arriba" : enPie ? "parcial" : "abajo";
-
-function pintarNodo(id, estados, clase, lideres = []) {
+/* Estado del sistema (fachada): cada servicio se ve "en línea" o "caído", sin
+   mostrar sus réplicas. De la base de datos se muestran los nodos vivos y el líder. */
+function pintarNodo(id, enLinea) {
   const nodo = $(`n-${id}`);
-  nodo.classList.remove("arriba", "parcial", "abajo");
-  nodo.classList.add(clase);
-  nodo.querySelector(".puntos").innerHTML = estados.map((ok, i) =>
-    `<circle cx="${20 + i * 14}" cy="46" r="4.6" class="${ok ? "p-ok" : "p-mal"}${lideres[i] ? " p-lider" : ""}"/>`).join("");
-  nodo.querySelector(".cuenta").textContent = `${estados.filter(Boolean).length}/${estados.length}`;
-}
-
-function pintarRaft(nodos) {
-  const n = nodos.length || 3, centro = [75, 62], radio = 44;
-  const pos = Array.from({ length: n }, (_, i) => {
-    const a = -Math.PI / 2 + (2 * Math.PI * i) / n;
-    return [centro[0] + radio * Math.cos(a), centro[1] + radio * Math.sin(a)];
-  });
-  let enlaces = "";
-  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
-    const roto = !(nodos[i]?.ok && nodos[j]?.ok);
-    enlaces += `<line class="enlace${roto ? " roto" : ""}" x1="${pos[i][0]}" y1="${pos[i][1]}" x2="${pos[j][0]}" y2="${pos[j][1]}"/>`;
-  }
-  const circulos = pos.map(([x, y], i) => {
-    const nd = nodos[i] || { ok: false, id: "?" };
-    return `<circle cx="${x}" cy="${y}" r="15" class="${nd.ok ? "ok" : "mal"}${nd.lider ? " lider" : ""}"><title>${escapar(nd.id)}</title></circle>
-      ${nd.lider ? `<text class="corona" x="${x}" y="${y - 21}">★</text>` : ""}
-      <text x="${x}" y="${y + 30}">${escapar(String(nd.id).replace(/^rqlite-|^nodo-/, ""))}</text>`;
-  }).join("");
-  $("raft").innerHTML = enlaces + circulos;
-}
-
-function replicaHtml(ok, url, titulo, detalle) {
-  return `<div class="replica ${ok ? "arriba" : "abajo"}${recienGolpeada(url) ? " golpe" : ""}" data-url="${escapar(url)}" title="${escapar(url)}">
-    <span class="punto"></span><b>${escapar(titulo)}</b><small>${detalle}</small></div>`;
+  nodo.classList.toggle("abajo", !enLinea);
+  nodo.querySelector(".cuenta").textContent = enLinea ? "en línea" : "caído";
 }
 
 async function revisarCluster() {
   let c;
   try { c = await (await pedir("/api/cluster")).json(); } catch { c = null; }
   if (!c) {
-    $("resumen").innerHTML = `<span class="punto abajo"></span><span>sin conexión con la interfaz · ${hora()}</span>`;
+    $("resumen").innerHTML = `<span class="punto abajo"></span><span>sin conexión con el sistema · ${hora()}</span>`;
     return;
   }
-  replicaServicio = {};
-  let activos = 0, total = 0;
-  const caido = {};
-  $("servicios").innerHTML = SERVICIOS_UI.map((s) => {
-    const replicas = c.servicios[s.id] || [];
-    replicas.forEach((r) => (replicaServicio[r.url] = s.id));
-    const ok = replicas.filter((r) => r.ok).length;
-    activos += ok; total += replicas.length;
-    caido[s.id] = ok === 0;
-    pintarNodo(s.id, replicas.map((r) => r.ok), estadoClase(ok, replicas.length, ok > 0));
-    return `<div class="grupo" style="--c: var(--${s.id})">
-      <h4><i></i>${s.nombre}<span>${ok}/${replicas.length}</span></h4>
-      ${replicas.map((r) => replicaHtml(r.ok, r.url, r.ok ? (r.nodo || sinEsquema(r.url)) : sinEsquema(r.url),
-        r.ok ? `${escapar(r.contenedor)} · ${r.ms} ms` : "sin respuesta")).join("")}</div>`;
-  }).join("");
+  const enLinea = {};
+  SERVICIOS_UI.forEach((s) => {
+    enLinea[s.id] = (c.servicios[s.id] || []).some((r) => r.ok);
+    pintarNodo(s.id, enLinea[s.id]);
+  });
+  pintarNodo("interfaz", true);
 
   // Base de datos
   const nodos = c.bd || [];
@@ -816,61 +721,37 @@ async function revisarCluster() {
   const okBd = nodos.filter((n) => n.ok).length;
   const necesarios = Math.floor(esperados / 2) + 1;
   const lider = nodos.find((n) => n.lider);
-  pintarNodo("bd", nodos.length ? nodos.map((n) => n.ok) : [false, false, false],
-    estadoClase(okBd, esperados, okBd >= necesarios), nodos.map((n) => n.lider));
-  pintarRaft(nodos);
-  $("raft-estado").textContent = okBd >= necesarios
-    ? (okBd === esperados ? `${okBd}/${esperados} nodos en línea` : `${okBd}/${esperados} nodos · sigue en pie`)
-    : "Sin mayoría";
-  $("raft-estado").style.color = okBd === esperados ? "" : okBd >= necesarios ? "var(--aviso)" : "var(--error)";
-  $("raft-lista").innerHTML = nodos.length === 0 ? `<li class="mal"><span class="punto abajo"></span>ningún nodo responde</li>`
-    : nodos.map((n) => `<li class="${n.ok ? "" : "mal"}"><span class="punto ${n.ok ? "arriba" : "abajo"}"></span>${escapar(n.id)}
-        <em>${n.ok ? (n.lider ? "líder" : "seguidor") : "sin respuesta"}</em></li>`).join("");
+  const bdEnLinea = okBd >= necesarios;
+  const letra = (id) => String(id).replace(/^rqlite-|^nodo-/, "");
+  pintarNodo("bd", bdEnLinea);
+  const estadoBd = $("raft-estado");
+  estadoBd.className = `bd-estado ${okBd === esperados ? "" : bdEnLinea ? "parcial" : "abajo"}`;
+  estadoBd.textContent = bdEnLinea ? `${okBd} de ${esperados} nodos vivos` : "sin mayoría";
+  $("raft-lista").innerHTML = nodos.length === 0 ? `<li class="mal"><b>—</b><small>ningún nodo responde</small></li>`
+    : nodos.map((n) => `<li class="${n.ok ? "" : "mal"}${n.lider ? " lider" : ""}" title="${escapar(n.id)}">
+        <b><span class="punto"></span>${escapar(letra(n.id))}</b>
+        <small>${n.ok ? (n.lider ? "★ líder" : "seguidor") : "caído"}</small></li>`).join("");
   $("tramos").innerHTML = Array.from({ length: esperados }, (_, i) => `<i class="${i < okBd ? "lleno" : ""}"></i>`).join("");
-  $("mayoria-texto").textContent = `Se necesitan ${necesarios} de ${esperados} para aceptar cambios.`;
+  $("mayoria-texto").textContent = lider
+    ? `Líder: nodo ${letra(lider.id)}. Acepta cambios mientras haya ${necesarios} de ${esperados} nodos vivos.`
+    : `Sin líder: se necesitan ${necesarios} de ${esperados} nodos vivos para aceptar cambios.`;
 
-  // Interfaz y conexiones: una conexión se marca cortada si su destino no está disponible
-  $("t-entrada").textContent = c.atendido_por || "entrada";
-  const bdCaida = okBd < necesarios;
+  // Conexiones del diagrama: cortadas si su destino no está disponible
   const cortadas = {
-    "e-ip": caido.pedidos, "e-pu": caido.usuarios || caido.pedidos, "e-pp": caido.productos || caido.pedidos,
-    "e-ub": bdCaida || caido.usuarios, "e-qb": bdCaida || caido.productos, "e-pb": bdCaida || caido.pedidos,
+    "e-ip": !enLinea.pedidos, "e-pu": !enLinea.usuarios || !enLinea.pedidos, "e-pp": !enLinea.productos || !enLinea.pedidos,
+    "e-ub": !bdEnLinea || !enLinea.usuarios, "e-qb": !bdEnLinea || !enLinea.productos, "e-pb": !bdEnLinea || !enLinea.pedidos,
   };
-  Object.entries(cortadas).forEach(([id, cortada]) => $(id).classList.toggle("cortada", !!cortada));
+  Object.entries(cortadas).forEach(([id, cortada]) => $(id).classList.toggle("cortada", cortada));
 
-  const clase = activos === total && lider ? "arriba" : activos > 0 && lider ? "parcial" : "abajo";
-  $("resumen").innerHTML = `<span class="punto ${clase}"></span><span>${activos}/${total} réplicas · `
-    + `${lider ? `líder: ${escapar(lider.id)}` : "base sin líder"}</span>`;
+  const todos = SERVICIOS_UI.every((s) => enLinea[s.id]) && bdEnLinea;
+  $("resumen").innerHTML = `<span class="punto ${todos ? "arriba" : "abajo"}"></span>`
+    + `<span>${todos ? "Sistema en línea" : "Sistema con fallas"}</span>`;
   $("ultima-revision").textContent = `en vivo · ${hora()}`;
-  $("pie-arquitectura").innerHTML = `Esta página entra por <b>${escapar(c.atendido_por)}</b>. La réplica que atiende cada petición se resalta con el color de su servicio.`;
 }
 
 /* Datos: tablas, ventas, inventario y reparto */
 const seleccion = { usuarios: null, productos: null };
 const filaClase = (servicio, id) => `clic${seleccion[servicio] === id ? " seleccionado" : ""}`;
-
-function dibujarReparto(pedidos) {
-  ultimosPedidos = pedidos;
-  const conteo = {};
-  pedidos.forEach((p) => { const r = p.atendido_por || "sin dato"; conteo[r] = (conteo[r] || 0) + 1; });
-  const filas = Object.entries(conteo).sort((a, b) => b[1] - a[1]);
-  const tonos = ["pedidos", "usuarios", "productos", "bd", "tenue"].map(color);
-  const radio = 50, circ = 2 * Math.PI * radio;
-  let desfase = 0;
-  const arcos = filas.map(([, n], i) => {
-    const largo = (n / pedidos.length) * circ;
-    const hueco = filas.length > 1 ? 2 : 0;
-    const arco = `<circle cx="65" cy="65" r="${radio}" stroke="${tonos[i % tonos.length]}" stroke-dasharray="${Math.max(0, largo - hueco)} ${circ}"
-      stroke-dashoffset="${-desfase}" transform="rotate(-90 65 65)"/>`;
-    desfase += largo;
-    return arco;
-  }).join("");
-  $("dona").innerHTML = `<circle class="fondo-dona" cx="65" cy="65" r="${radio}"/>${arcos}
-    <text x="65" y="68">${pedidos.length}</text><text class="sub" x="65" y="84">pedidos</text>`;
-  $("reparto-leyenda").innerHTML = filas.length === 0 ? `<li class="tenue">Todavía no hay pedidos.</li>`
-    : filas.map(([r, n], i) => `<li><i style="background:${tonos[i % tonos.length]}"></i>${escapar(r)}
-        <b>${n} · ${Math.round((n / pedidos.length) * 100)}%</b></li>`).join("");
-}
 
 function dibujarInventario(productos) {
   const maximo = Math.max(1, ...productos.map((p) => p.existencias));
@@ -909,16 +790,15 @@ async function cargarDatos() {
     dibujarInventario(productos.datos);
   } else $("productos").innerHTML = sinDatos(4, productos);
 
-  if (pedidos.codigo !== 200) $("pedidos").innerHTML = sinDatos(8, pedidos);
+  if (pedidos.codigo !== 200) $("pedidos").innerHTML = sinDatos(7, pedidos);
   else {
-    $("pedidos").innerHTML = pedidos.datos.length === 0 ? `<tr><td colspan="8" class="vacio">Todavía no hay pedidos.</td></tr>`
+    $("pedidos").innerHTML = pedidos.datos.length === 0 ? `<tr><td colspan="7" class="vacio">Todavía no hay pedidos.</td></tr>`
       : pedidos.datos.slice().reverse().map((p) => `<tr><td>${idHtml(p.id, "ped")}</td>
         <td>${escapar(p.usuario.nombre)} <span class="tenue mono">${escapar(p.usuario.id)}</span></td>
         <td>${escapar(p.producto.nombre)} <span class="tenue mono">${escapar(p.producto.id)}</span></td>
         <td class="num">${p.cantidad}</td><td class="num">${pesos.format(p.precio_unitario)}</td>
-        <td class="num"><b>${pesos.format(p.total)}</b></td><td class="tenue">${escapar(p.atendido_por || "")}</td>
+        <td class="num"><b>${pesos.format(p.total)}</b></td>
         <td class="mono tenue">${escapar(p.fecha_utc.replace("T", " ").slice(0, 19))}</td></tr>`).join("");
-    dibujarReparto(pedidos.datos);
   }
 }
 
@@ -943,7 +823,7 @@ function mostrarResultadoCrud(servicio, r, aviso) {
   const caja = $(`resultado-${servicio}`);
   if (!r) { caja.innerHTML = aviso ? `<span class="alerta">${escapar(aviso)}</span>` : ""; return; }
   const detalle = r.datos?.error || r.datos?.mensaje || JSON.stringify(r.datos);
-  caja.innerHTML = `${codigoHtml(r.codigo)}<span>${r.metodo} ${escapar(sinEsquema(r.destino))}</span>
+  caja.innerHTML = `${codigoHtml(r.codigo)}<span>${r.metodo} ${escapar(rutaPublica(r.destino))}</span>
     <span class="detalle ${r.datos?.error ? "alerta" : ""}">${escapar(detalle)}</span>`;
 }
 
@@ -1013,7 +893,7 @@ async function enviarPedido(usuario, producto, cantidad) {
 
 function mostrarRespuesta(r, cuerpo) {
   $("respuesta").innerHTML = `
-    <div class="linea-respuesta">${codigoHtml(r.codigo)}<span>POST ${escapar(sinEsquema(r.destino))}</span><span>${r.ms} ms</span></div>
+    <div class="linea-respuesta">${codigoHtml(r.codigo)}<span>POST ${escapar(rutaPublica(r.destino))}</span><span>${r.ms} ms</span></div>
     <pre>${escapar(JSON.stringify(r.datos, null, 2))}</pre>
     <div class="rotulo subtitulo" style="margin-top:20px">Cuerpo enviado</div>
     <pre>${escapar(cuerpo)}</pre>`;
