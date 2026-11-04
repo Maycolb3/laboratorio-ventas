@@ -349,9 +349,9 @@
     </section>
 
     <div class="lateral">
-      <!-- Base de datos -->
+      <!-- Vida de los nodos -->
       <section class="bloque b-bd suave">
-        <div class="bd-cabeza"><h3>Base de datos</h3><span class="bd-estado" id="raft-estado">—</span></div>
+        <div class="bd-cabeza"><h3>Vida de los nodos</h3><span class="bd-estado" id="raft-estado">—</span></div>
         <ul class="nodos-bd" id="raft-lista"></ul>
         <div class="tramos" id="tramos"></div>
         <p class="mayoria-texto" id="mayoria-texto"></p>
@@ -730,11 +730,11 @@ async function revisarCluster() {
   $("raft-lista").innerHTML = nodos.length === 0 ? `<li class="mal"><b>—</b><small>ningún nodo responde</small></li>`
     : nodos.map((n) => `<li class="${n.ok ? "" : "mal"}${n.lider ? " lider" : ""}" title="${escapar(n.id)}">
         <b><span class="punto"></span>${escapar(letra(n.id))}</b>
-        <small>${n.ok ? (n.lider ? "★ líder" : "seguidor") : "caído"}</small></li>`).join("");
+        <small>${n.ok ? (n.lider ? "★ líder" : "activo") : "caído"}</small></li>`).join("");
   $("tramos").innerHTML = Array.from({ length: esperados }, (_, i) => `<i class="${i < okBd ? "lleno" : ""}"></i>`).join("");
   $("mayoria-texto").textContent = lider
-    ? `Líder: nodo ${letra(lider.id)}. Acepta cambios mientras haya ${necesarios} de ${esperados} nodos vivos.`
-    : `Sin líder: se necesitan ${necesarios} de ${esperados} nodos vivos para aceptar cambios.`;
+    ? `Líder actual: nodo ${letra(lider.id)}. El sistema sigue funcionando mientras haya ${necesarios} de ${esperados} nodos vivos.`
+    : `Sin líder: se necesitan ${necesarios} de ${esperados} nodos vivos para seguir funcionando.`;
 
   // Conexiones del diagrama: cortadas si su destino no está disponible
   const cortadas = {
