@@ -18,21 +18,36 @@ import replicas
 # Nodos de la base de datos, el más cercano primero. Ejemplo:
 # DB_URLS=http://rqlite:4001,http://100.99.60.63:4001,http://100.76.106.78:4001
 NODOS = [url.strip() for url in os.environ.get("DB_URLS", "http://rqlite:4001").split(",") if url.strip()]
-# (conectar, responder): un computador apagado se detecta en 1.5 s.
-TIEMPO_ESPERA = (1.5, 5)
+# (conectar, responder): un computador apagado se detecta en 1.5 s. Responder
+# puede tardar varios segundos: por internet cada escritura espera la
+# confirmación de la mayoría, y más si hay un cambio de líder en curso.
+TIEMPO_ESPERA = (1.5, 10)
+
+# Mensaje para el usuario cuando una escritura no se pudo confirmar.
+MENSAJE_INCIERTA = ("No se pudo confirmar si el cambio se guardó: la base de datos tardó en responder "
+                    "(por ejemplo, mientras elegía un nuevo líder). Revise los datos antes de repetirlo.")
 
 
 class BaseDeDatosNoDisponible(Exception):
     """Ningún nodo pudo atender la operación (por ejemplo, no hay mayoría)."""
 
 
+class EscrituraIncierta(BaseDeDatosNoDisponible):
+    """La escritura llegó a la base pero no se confirmó: pudo haberse aplicado.
+
+    Pasa cuando la respuesta tarda demasiado o se corta, por ejemplo durante un
+    cambio de líder. No se repite en otro nodo para no aplicarla dos veces.
+    """
+
+
 class ErrorSQL(Exception):
     """La base respondió, pero la sentencia falló (restricción, sintaxis...)."""
 
 
-# Mientras el clúster elige un nuevo líder (unos segundos), los nodos no
-# atienden. Se reintenta durante este tiempo antes de rendirse.
-ESPERA_ELECCION = 6
+# Mientras el clúster elige un nuevo líder, los nodos no atienden. Por internet
+# una elección puede tardar varios segundos (se vio una de 9 s), así que se
+# reintenta durante este tiempo antes de rendirse.
+ESPERA_ELECCION = 15
 
 
 def _resultados(respuesta, cantidad):
@@ -65,18 +80,23 @@ def _enviar(ruta, sentencias, es_lectura):
             except requests.exceptions.RequestException as error:
                 replicas.marcar_caida(nodo)
                 ultimo_error = f"{nodo}: {error.__class__.__name__}"
+                if not es_lectura and not replicas.no_llego(error):
+                    # El nodo recibió la escritura pero no contestó a tiempo: el
+                    # líder pudo haberla aplicado. Repetirla podría duplicarla.
+                    print(f"[bd] ERROR: escritura sin confirmar ({ultimo_error})")
+                    raise EscrituraIncierta(ultimo_error)
                 continue
             if respuesta.status_code == 200:
                 resultados = _resultados(respuesta, len(sentencias))
                 if resultados is not None:
                     replicas.marcar_sana(nodo)
                     return resultados
-                ultimo_error = f"{nodo}: respuesta incompleta (cambio de líder)"
+                ultimo_error = f"{nodo}: respuesta incompleta (cambio de líder): {respuesta.text[:200]}"
                 if not es_lectura:
                     # Una escritura pudo haberse aplicado: repetirla podría
                     # duplicarla. Quien llama decide (pedidos compensa).
                     print(f"[bd] ERROR: {ultimo_error}")
-                    raise BaseDeDatosNoDisponible(ultimo_error)
+                    raise EscrituraIncierta(ultimo_error)
                 continue
             # 503 = ese nodo no encuentra líder: la sentencia no se aplicó y se
             # puede intentar con otro nodo.
@@ -103,11 +123,16 @@ def ejecutar(*sentencias):
 
 
 def consultar(sql, *parametros):
-    """Lectura con consistencia fuerte: la atiende el líder, nunca da datos viejos.
+    """Lectura linealizable: la atiende el líder, nunca da datos viejos.
+
+    El líder solo confirma con la mayoría que sigue siendo líder antes de
+    responder. A diferencia de level=strong, la lectura no se escribe en el
+    registro de Raft: por internet eso duplicaba el tráfico en las ráfagas de
+    compras y hacía perder el líder.
 
     Devuelve una lista de diccionarios, uno por fila.
     """
-    resultado = _enviar("/db/query?level=strong&associative", [[sql, *parametros]], es_lectura=True)[0]
+    resultado = _enviar("/db/query?level=linearizable&associative", [[sql, *parametros]], es_lectura=True)[0]
     if "error" in resultado:
         raise ErrorSQL(resultado["error"])
     return resultado.get("rows", [])

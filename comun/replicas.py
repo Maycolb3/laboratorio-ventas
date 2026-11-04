@@ -8,7 +8,27 @@ siguientes segundos se va directo a las réplicas que sí responden.
 import threading
 import time
 
+import requests
+import urllib3
+
 OLVIDO = 15  # segundos que una réplica caída queda al final de la lista
+
+
+def no_llego(error):
+    """True si la petición nunca llegó a la réplica (no se pudo conectar).
+
+    Solo en ese caso es seguro repetir una escritura en otra réplica. Si la
+    conexión se abrió pero la respuesta no llegó (tardó demasiado o se cortó),
+    el cambio pudo haberse aplicado: repetirlo podría aplicarlo dos veces.
+    """
+    if isinstance(error, requests.exceptions.ConnectTimeout):
+        return True
+    if isinstance(error, requests.exceptions.ConnectionError) and error.args:
+        # Conexión rechazada o nombre que no existe: urllib3 lo informa como
+        # NewConnectionError, que es una subclase de ConnectTimeoutError.
+        razon = getattr(error.args[0], "reason", error.args[0])
+        return isinstance(razon, urllib3.exceptions.ConnectTimeoutError)
+    return False
 
 _caidas = {}
 _candado = threading.Lock()

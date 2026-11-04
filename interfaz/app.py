@@ -35,9 +35,10 @@ DB_URLS = lista("DB_URLS", "http://rqlite:4001")
 # Funnel). La página las usa para cambiar de entrada si cae la suya.
 ENTRADAS = lista("ENTRADAS", "")
 NODO = os.environ.get("NODO", "local")
-# (conectar, responder): una réplica apagada se detecta en 1.5 s; pedidos
-# puede tardar más si a su vez está cambiando de réplica de otros servicios.
-TIEMPO_ESPERA = (1.5, 20)
+# (conectar, responder): una réplica apagada se detecta en 1.5 s. Responder
+# tiene hasta 90 s: un pedido pasa por usuarios, productos y la base, y cada
+# paso puede esperar una elección de líder. Cloudflare corta a los 100 s.
+TIEMPO_ESPERA = (1.5, 90)
 
 
 @app.after_request
@@ -119,6 +120,17 @@ def reenviar(servicio, ruta):
             # Solo se cambia de réplica si esta no respondió; una respuesta de
             # error (404, 409...) es la respuesta del sistema y se entrega tal cual.
             replicas.marcar_caida(base)
+            if request.method != "GET" and not replicas.no_llego(error):
+                # La réplica recibió el cambio pero no contestó a tiempo: pudo
+                # haberlo aplicado. Enviarlo a otra podría aplicarlo dos veces
+                # (por ejemplo, dos pedidos por una sola compra).
+                print(f"[interfaz] {request.method} {url} sin respuesta ({error.__class__.__name__}); no se repite")
+                resultado = jsonify({"error": f"El servicio de {servicio} no respondió a tiempo. No se sabe si el "
+                                              "cambio se aplicó: revise los datos antes de repetirlo."})
+                resultado.status_code = 504
+                resultado.headers["X-Origen"] = servicio
+                resultado.headers["X-Destino"] = url
+                break
             print(f"[interfaz] {request.method} {url} no responde ({error.__class__.__name__}); se prueba otra réplica")
             continue
         replicas.marcar_sana(base)

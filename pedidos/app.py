@@ -33,8 +33,9 @@ def lista(nombre, por_defecto):
 USUARIOS_URLS = lista("USUARIOS_URLS", "http://usuarios:8001")
 PRODUCTOS_URLS = lista("PRODUCTOS_URLS", "http://productos:8002")
 # (conectar, responder): una réplica apagada se detecta en 1.5 s; una que
-# responde tiene hasta 8 s, por si a su vez está cambiando de nodo de la base.
-TIEMPO_ESPERA = (1.5, 8)
+# responde tiene hasta 45 s. Descontar hace una escritura y una lectura en la
+# base, y cada una puede esperar a que se elija un líder (comun/bd.py).
+TIEMPO_ESPERA = (1.5, 45)
 NODO = os.environ.get("NODO", "local")
 
 # Semáforo contador: como mucho N compras se procesan a la vez en esta réplica.
@@ -126,6 +127,11 @@ def base_no_disponible(error):
     return jsonify({"error": "La base de datos no está disponible. Intente más tarde."}), 503
 
 
+@app.errorhandler(bd.EscrituraIncierta)
+def escritura_incierta(error):
+    return jsonify({"error": bd.MENSAJE_INCIERTA}), 503
+
+
 @app.get("/salud")
 @app.get("/health")  # mismo endpoint en inglés, para monitores que consultan /health
 def salud():
@@ -200,6 +206,22 @@ def procesar_pedido():
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             usuario["id"], usuario["nombre"], producto["id"], producto["nombre"], producto["precio"],
             cantidad, total, producto["existencias"], operacion, fecha, NODO])
+    except bd.EscrituraIncierta as incierta:
+        # El pedido pudo haberse guardado aunque no llegó la confirmación. Se busca
+        # por su operación antes de devolver las unidades al inventario.
+        try:
+            filas = bd.consultar("SELECT * FROM pedidos WHERE operacion_inventario = ?", operacion)
+        except bd.BaseDeDatosNoDisponible:
+            # No se puede saber: las unidades quedan descontadas para no vender de
+            # más. Se revisa a mano con la operación del registro.
+            print(f"[pedidos] ERROR: no se sabe si se guardó el pedido de la operación {operacion}; no se revierte")
+            raise incierta
+        if filas:
+            pedido = a_json(filas[0])
+            print(f"[pedidos] Pedido {pedido['id']} confirmado después de una respuesta incompleta")
+            return jsonify({"mensaje": "Pedido creado correctamente", "pedido": pedido}), 201
+        revertir(operacion)
+        raise incierta
     except (bd.BaseDeDatosNoDisponible, bd.ErrorSQL):
         revertir(operacion)
         raise

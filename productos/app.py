@@ -98,6 +98,11 @@ def base_no_disponible(error):
     return jsonify({"error": "La base de datos no está disponible. Intente más tarde."}), 503
 
 
+@app.errorhandler(bd.EscrituraIncierta)
+def escritura_incierta(error):
+    return jsonify({"error": bd.MENSAJE_INCIERTA}), 503
+
+
 @app.get("/salud")
 @app.get("/health")  # mismo endpoint en inglés, para monitores que consultan /health
 def salud():
@@ -154,7 +159,18 @@ def modificar_producto(producto_id):
     if not resultado[0].get("rows_affected"):
         return no_existe(producto_id)
     print(f"[productos] Producto {producto_id} modificado desde {request.remote_addr}")
-    return jsonify(buscar(producto_id))
+    try:
+        producto = buscar(producto_id)
+    except bd.BaseDeDatosNoDisponible:
+        # El cambio ya quedó guardado; solo falló leerlo de vuelta (por ejemplo,
+        # la base perdió la mayoría justo después). No se informa como error.
+        producto = None
+    if producto is None:
+        campos = {k: datos[k] for k in ("precio", "existencias") if k in datos}
+        if nombre is not None:
+            campos["nombre"] = nombre
+        return jsonify({"id": producto_id, **campos, "mensaje": f"Producto {producto_id} modificado"})
+    return jsonify(producto)
 
 
 @app.delete("/productos/<producto_id>")
