@@ -30,21 +30,61 @@ class ErrorSQL(Exception):
     """La base respondió, pero la sentencia falló (restricción, sintaxis...)."""
 
 
-def _enviar(ruta, sentencias):
+# Mientras el clúster elige un nuevo líder (unos segundos), los nodos no
+# atienden. Se reintenta durante este tiempo antes de rendirse.
+ESPERA_ELECCION = 6
+
+
+def _resultados(respuesta, cantidad):
+    """Los resultados de una respuesta 200, o None si no traen uno por sentencia.
+
+    Durante un cambio de líder rqlite puede contestar 200 con un error general
+    o sin resultados: eso no es una respuesta válida.
+    """
+    try:
+        cuerpo = respuesta.json()
+    except ValueError:
+        return None
+    resultados = cuerpo.get("results") if isinstance(cuerpo, dict) else None
+    if cuerpo.get("error") or not isinstance(resultados, list) or not resultados:
+        return None
+    # Si una sentencia de la transacción falla, rqlite puede devolver menos
+    # resultados, pero uno de ellos trae el error de SQL: esa sí es válida.
+    if len(resultados) != cantidad and not any("error" in r for r in resultados):
+        return None
+    return resultados
+
+
+def _enviar(ruta, sentencias, es_lectura):
+    limite = time.monotonic() + ESPERA_ELECCION
     ultimo_error = None
-    for nodo in replicas.ordenar(NODOS):
-        try:
-            respuesta = requests.post(f"{nodo}{ruta}", json=sentencias, timeout=TIEMPO_ESPERA)
-        except requests.exceptions.RequestException as error:
+    while True:
+        for nodo in replicas.ordenar(NODOS):
+            try:
+                respuesta = requests.post(f"{nodo}{ruta}", json=sentencias, timeout=TIEMPO_ESPERA)
+            except requests.exceptions.RequestException as error:
+                replicas.marcar_caida(nodo)
+                ultimo_error = f"{nodo}: {error.__class__.__name__}"
+                continue
+            if respuesta.status_code == 200:
+                resultados = _resultados(respuesta, len(sentencias))
+                if resultados is not None:
+                    replicas.marcar_sana(nodo)
+                    return resultados
+                ultimo_error = f"{nodo}: respuesta incompleta (cambio de líder)"
+                if not es_lectura:
+                    # Una escritura pudo haberse aplicado: repetirla podría
+                    # duplicarla. Quien llama decide (pedidos compensa).
+                    print(f"[bd] ERROR: {ultimo_error}")
+                    raise BaseDeDatosNoDisponible(ultimo_error)
+                continue
+            # 503 = ese nodo no encuentra líder: la sentencia no se aplicó y se
+            # puede intentar con otro nodo.
             replicas.marcar_caida(nodo)
-            ultimo_error = f"{nodo}: {error.__class__.__name__}"
-            continue
-        if respuesta.status_code == 200:
-            replicas.marcar_sana(nodo)
-            return respuesta.json()["results"]
-        # 503 = ese nodo no encuentra líder; se intenta con otro.
-        replicas.marcar_caida(nodo)
-        ultimo_error = f"{nodo}: HTTP {respuesta.status_code}"
+            ultimo_error = f"{nodo}: HTTP {respuesta.status_code}"
+        if time.monotonic() >= limite:
+            break
+        time.sleep(1)
     print(f"[bd] ERROR: ningún nodo respondió ({ultimo_error})")
     raise BaseDeDatosNoDisponible(ultimo_error)
 
@@ -55,7 +95,7 @@ def ejecutar(*sentencias):
     Cada sentencia es una lista [sql, parámetro1, parámetro2, ...].
     Devuelve un resultado por sentencia, con rows_affected y last_insert_id.
     """
-    resultados = _enviar("/db/execute?transaction", list(sentencias))
+    resultados = _enviar("/db/execute?transaction", list(sentencias), es_lectura=False)
     for resultado in resultados:
         if "error" in resultado:
             raise ErrorSQL(resultado["error"])
@@ -67,7 +107,7 @@ def consultar(sql, *parametros):
 
     Devuelve una lista de diccionarios, uno por fila.
     """
-    resultado = _enviar("/db/query?level=strong&associative", [[sql, *parametros]])[0]
+    resultado = _enviar("/db/query?level=strong&associative", [[sql, *parametros]], es_lectura=True)[0]
     if "error" in resultado:
         raise ErrorSQL(resultado["error"])
     return resultado.get("rows", [])

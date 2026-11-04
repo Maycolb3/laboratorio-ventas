@@ -74,8 +74,7 @@
   .bloque-cabeza p { margin: 3px 0 0; font-size: 13px; color: var(--suave); max-width: 560px; }
   .suave { background: color-mix(in srgb, var(--c) var(--tinte), var(--superficie)); border-color: color-mix(in srgb, var(--c) 20%, var(--linea)); }
 
-  .b-arquitectura { grid-column: span 8; grid-row: span 2; }
-  .b-ventas { grid-column: span 4; }
+  .b-arquitectura { grid-column: span 8; }
   .b-bd { grid-column: span 4; --c: var(--bd); }
   .b-inventario { grid-column: span 7; --c: var(--productos); }
   .b-reparto { grid-column: span 5; --c: var(--pedidos); }
@@ -83,8 +82,8 @@
   .b-pedidos { grid-column: span 7; }
   .b-registro { grid-column: span 5; }
   @media (max-width: 1100px) {
-    .b-arquitectura, .b-mesa { grid-column: span 12; grid-row: auto; }
-    .b-ventas, .b-bd, .b-inventario, .b-reparto { grid-column: span 6; }
+    .b-arquitectura, .b-bd, .b-mesa { grid-column: span 12; }
+    .b-inventario, .b-reparto { grid-column: span 6; }
     .b-pedidos, .b-registro { grid-column: span 12; }
   }
   @media (max-width: 720px) { .bento > * { grid-column: span 12 !important; } }
@@ -113,7 +112,7 @@
   .topologia .paquete { filter: drop-shadow(0 0 5px currentColor); }
 
   .replicas { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
-  @media (max-width: 720px) { .replicas { grid-template-columns: 1fr; } }
+  @media (max-width: 720px) { .replicas { grid-template-columns: minmax(0, 1fr); } }
   .grupo h4 { font: 700 12.5px var(--sans); display: flex; align-items: center; gap: 7px; margin-bottom: 6px; }
   .grupo h4 i { width: 10px; height: 10px; border-radius: 3px; background: var(--c); }
   .grupo h4 span { margin-left: auto; font: 500 11px var(--mono); color: var(--tenue); }
@@ -128,22 +127,9 @@
   .replica.golpe { border-color: var(--c); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 22%, transparent); }
   .pie-arquitectura { margin: 8px 0 0; font-size: 12.5px; color: var(--suave); }
 
-  /* Ventas: bloque de color fuerte con curva acumulada */
-  .b-ventas { background: var(--marino); border-color: var(--marino); color: var(--marino-texto); overflow: hidden; display: flex; flex-direction: column; }
-  .b-ventas .rotulo { color: var(--marino-tenue); }
-  .cifra { font: 700 44px/1.05 var(--display); letter-spacing: -.02em; margin: 8px 0 2px; font-variant-numeric: lining-nums tabular-nums; }
-  .b-ventas .nota { font-size: 12.5px; color: var(--marino-tenue); }
-  .curva { display: block; width: calc(100% + 48px); height: 78px; margin: 10px -24px 0; }
-  .curva .linea { fill: none; stroke: var(--oro); stroke-width: 2.5; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
-  .curva .area { fill: url(#degradado-oro); }
-  .trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: auto; padding-top: 12px; border-top: 1px solid rgba(255,255,255,.12); }
-  .trio b { display: block; font: 700 22px/1.1 var(--display); font-variant-numeric: lining-nums; }
-  .trio span { font-size: 12px; color: var(--marino-tenue); }
-  .trio .agotados b { color: #ff9a9d; }
-
   /* Base de datos: consenso Raft */
   .raft { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 16px; align-items: center; }
-  @media (max-width: 420px) { .raft { grid-template-columns: 1fr; } }
+  @media (max-width: 420px) { .raft { grid-template-columns: minmax(0, 1fr); } }
   .raft svg { width: 100%; height: auto; overflow: visible; }
   .raft .enlace { stroke: color-mix(in srgb, var(--bd) 35%, transparent); stroke-width: 1.5; }
   .raft .enlace.roto { stroke: var(--error); stroke-dasharray: 3 4; opacity: .5; }
@@ -164,7 +150,7 @@
 
   /* Inventario */
   .inventario { list-style: none; margin: 0; padding: 0 4px 0 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; max-height: 210px; overflow: auto; }
-  @media (max-width: 560px) { .inventario { grid-template-columns: 1fr; } }
+  @media (max-width: 560px) { .inventario { grid-template-columns: minmax(0, 1fr); } }
   .inventario li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 10px; font-size: 13px; }
   .inventario .nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .inventario .valor { font: 600 12px var(--mono); }
@@ -197,7 +183,7 @@
   .panel-intro { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 18px; }
   .panel-intro p { margin: 0; color: var(--suave); max-width: 700px; font-size: 13.5px; }
   .dos { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; }
-  @media (max-width: 960px) { .dos { grid-template-columns: 1fr; } }
+  @media (max-width: 960px) { .dos { grid-template-columns: minmax(0, 1fr); } }
 
   label { display: grid; gap: 6px; min-width: 0; }
   label > span { font: 600 11px var(--sans); letter-spacing: .07em; text-transform: uppercase; color: var(--tenue); }
@@ -215,7 +201,7 @@
 
   #formulario { display: grid; grid-template-columns: 1fr 1fr 100px; gap: 12px; align-items: end; }
   #formulario button { grid-column: 1 / -1; justify-self: start; padding: 11px 22px; }
-  @media (max-width: 560px) { #formulario { grid-template-columns: 1fr; } }
+  @media (max-width: 560px) { #formulario { grid-template-columns: minmax(0, 1fr); } }
 
   .recorrido { list-style: none; margin: 24px 0 0; padding: 0; }
   .recorrido li { position: relative; padding: 0 0 15px 30px; font-size: 13px; color: var(--suave); }
@@ -234,7 +220,8 @@
   .codigo { font: 600 12px var(--mono); display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 999px;
             background: color-mix(in srgb, currentColor 13%, transparent); white-space: nowrap; }
   .c2 { color: var(--ok); } .c4 { color: var(--aviso); } .c5 { color: var(--error); }
-  pre { margin: 0; padding: 14px 16px; background: #12141c; color: #e6e8f0; border-radius: 14px; font: 12.5px/1.65 var(--mono); overflow-x: auto; max-height: 340px; }
+  pre { margin: 0; padding: 14px 16px; background: #12141c; color: #e6e8f0; border-radius: 14px; font: 12.5px/1.65 var(--mono); overflow: auto; max-height: 340px;
+        white-space: pre-wrap; overflow-wrap: anywhere; }
   .vacio { color: var(--tenue); font-size: 13px; padding: 18px 0; }
   .subtitulo { margin: 0 0 10px; }
 
@@ -387,23 +374,6 @@
       </div>
       <div class="replicas" id="servicios"></div>
       <p class="pie-arquitectura" id="pie-arquitectura">La réplica que atiende cada petición de esta página se resalta con el color de su servicio.</p>
-    </section>
-
-    <!-- Ventas -->
-    <section class="bloque b-ventas">
-      <div class="rotulo">Ventas registradas</div>
-      <div class="cifra" id="kpi-ingresos">—</div>
-      <div class="nota" id="kpi-nota">Leídas de la base de datos distribuida</div>
-      <svg class="curva" viewBox="0 0 300 80" preserveAspectRatio="none" aria-hidden="true">
-        <defs><linearGradient id="degradado-oro" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0" stop-color="#ffc94d" stop-opacity=".35"/><stop offset="1" stop-color="#ffc94d" stop-opacity="0"/></linearGradient></defs>
-        <path class="area" id="curva-area" d=""/><path class="linea" id="curva-linea" d=""/>
-      </svg>
-      <div class="trio">
-        <div><b id="kpi-pedidos">—</b><span>pedidos</span></div>
-        <div><b id="kpi-unidades">—</b><span>unidades</span></div>
-        <div class="agotados"><b id="kpi-agotados">—</b><span>agotados</span></div>
-      </div>
     </section>
 
     <!-- Base de datos -->
@@ -879,23 +849,6 @@ async function revisarCluster() {
 const seleccion = { usuarios: null, productos: null };
 const filaClase = (servicio, id) => `clic${seleccion[servicio] === id ? " seleccionado" : ""}`;
 
-function dibujarVentas(pedidos) {
-  const ingresos = pedidos.reduce((s, p) => s + p.total, 0);
-  $("kpi-ingresos").textContent = pesos.format(ingresos);
-  $("kpi-pedidos").textContent = enteros.format(pedidos.length);
-  $("kpi-unidades").textContent = enteros.format(pedidos.reduce((s, p) => s + p.cantidad, 0));
-  const ultimo = pedidos[pedidos.length - 1];
-  $("kpi-nota").textContent = ultimo ? `Último: ${ultimo.id} · ${ultimo.producto.nombre} × ${ultimo.cantidad}` : "Todavía no hay pedidos";
-  // Curva de ventas acumuladas, pedido a pedido
-  let acumulado = 0;
-  const valores = [0, ...pedidos.map((p) => (acumulado += p.total))];
-  const maximo = Math.max(1, acumulado);
-  const puntos = valores.map((v, i) => [valores.length === 1 ? 300 : (i / (valores.length - 1)) * 300, 74 - (v / maximo) * 64]);
-  const linea = puntos.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
-  $("curva-linea").setAttribute("d", linea);
-  $("curva-area").setAttribute("d", `${linea} L300 80 L0 80 Z`);
-}
-
 function dibujarReparto(pedidos) {
   ultimosPedidos = pedidos;
   const conteo = {};
@@ -921,7 +874,6 @@ function dibujarReparto(pedidos) {
 
 function dibujarInventario(productos) {
   const maximo = Math.max(1, ...productos.map((p) => p.existencias));
-  $("kpi-agotados").textContent = productos.filter((p) => p.existencias <= 0).length;
   $("kpi-productos").textContent = `${productos.length} productos`;
   $("inventario").innerHTML = productos.length === 0 ? `<li class="tenue">No hay productos.</li>`
     : productos.map((p) => {
@@ -966,7 +918,6 @@ async function cargarDatos() {
         <td class="num">${p.cantidad}</td><td class="num">${pesos.format(p.precio_unitario)}</td>
         <td class="num"><b>${pesos.format(p.total)}</b></td><td class="tenue">${escapar(p.atendido_por || "")}</td>
         <td class="mono tenue">${escapar(p.fecha_utc.replace("T", " ").slice(0, 19))}</td></tr>`).join("");
-    dibujarVentas(pedidos.datos);
     dibujarReparto(pedidos.datos);
   }
 }

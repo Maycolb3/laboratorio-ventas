@@ -24,7 +24,13 @@ services:
     container_name: bd
     # La primera vez, la base espera a los tres nodos y elige un líder.
     # Después basta con que estén dos de tres.
-    command: -bootstrap-expect 3 -join ${MI_IP:?Falta MI_IP en el archivo .env}:4002,${IP_OTRO_1:?Falta IP_OTRO_1 en el archivo .env}:4002,${IP_OTRO_2:?Falta IP_OTRO_2 en el archivo .env}:4002
+    # Tiempos de Raft para internet: entre computadores por Tailscale la ida y
+    # vuelta puede pasar de 200 ms. Con el valor por defecto (1 s) los nodos se
+    # pierden de vista por momentos y repiten la elección de líder sin parar.
+    command: >-
+      -bootstrap-expect 3
+      -raft-heartbeat-timeout 3s -raft-election-timeout 3s
+      -join ${MI_IP:?Falta MI_IP en el archivo .env}:4002,${IP_OTRO_1:?Falta IP_OTRO_1 en el archivo .env}:4002,${IP_OTRO_2:?Falta IP_OTRO_2 en el archivo .env}:4002
     environment:
       NODE_ID: nodo-${NODO}
       HTTP_ADV_ADDR: ${MI_IP}:4001   # dirección con la que lo encuentran los otros nodos
