@@ -114,7 +114,7 @@ Códigos de respuesta de `POST /pedidos`: 201 pedido creado, 400 datos inválido
 - **Lista de réplicas.** Cada servicio conoce todas las réplicas de los demás (`USUARIOS_URLS`, `PRODUCTOS_URLS`, `PEDIDOS_URLS`, `DB_URLS`): primero la de su computador y luego las de los otros. Si una no responde en 1.5 s, prueba la siguiente.
 - **Memoria de réplicas caídas.** La réplica que falló pasa al final de la lista durante 15 s. Así, solo la primera petición después de una caída paga la espera.
 - **Sin descuentos dobles.** Cada descuento lleva un identificador de operación único. Si pedidos reintenta en otra réplica de productos, la operación no se descuenta dos veces. Si no se sabe si se aplicó, pedidos la revierte (`POST /operaciones/<id>/revertir`), y revertir dos veces tampoco suma unidades de más.
-- **Un solo enlace público (Cloudflare Tunnel).** Los tres computadores corren el mismo túnel. Cloudflare envía cada visita a un conector vivo: si cae un computador, el enlace sigue funcionando con los otros dos, sin que nadie cambie de dirección (paso 11). El conector comparte la red con la interfaz, así que si solo cae la interfaz de un equipo, ese conector también se desconecta.
+- **Un solo enlace público (Cloudflare Tunnel).** Los tres computadores corren el mismo túnel. Cloudflare envía cada visita a un conector vivo: si cae un computador, el enlace sigue funcionando con los otros dos, sin que nadie cambie de dirección (paso 11). El conector corre dentro del contenedor de la interfaz, así que si solo cae la interfaz de un equipo, ese conector también se desconecta.
 - **Alternativa con un enlace por computador (Tailscale Funnel).** La página conoce las tres entradas (`ENTRADAS`): si la suya deja de responder, sigue sola por otra y lo indica arriba a la derecha. Solo sirve para una página que ya estaba abierta.
 
 ## Estructura de archivos
@@ -391,40 +391,53 @@ Los tres computadores usan **el mismo archivo**, `docker-compose.nodo.yml`. Cada
 
 ## Paso 11. Un solo enlace con Cloudflare Tunnel
 
-Un túnel de Cloudflare puede tener varios **conectores** (réplicas), hasta 25. Si los tres computadores corren el mismo túnel, Cloudflare envía cada visita a un conector vivo. Así hay **una sola dirección** para todo el sistema y sigue funcionando aunque se caiga cualquiera de los tres. El conector ya está en `docker-compose.nodo.yml` (servicio `tunel`) y arranca con el resto.
+**Enlace del sistema: https://ventas.sistemasdistribuidos.me**
 
-Se necesita una cuenta gratuita de Cloudflare y un dominio propio agregado a ella. El GitHub Student Pack incluye dominios gratis por un año; si no, un `.xyz` o `.site` cuesta entre 1 y 10 dólares el primer año.
+Un túnel de Cloudflare puede tener varios **conectores**, hasta 25. Los tres computadores corren el mismo túnel (`ventas`) con el mismo token, y Cloudflare envía cada visita a un conector vivo. Así hay **una sola dirección** para todo el sistema, y sigue funcionando aunque se caiga cualquiera de los tres. Funciona también para alguien que abre el enlace por primera vez después de la caída.
 
-Lo hace **una sola persona**, una sola vez:
+El conector va **dentro del contenedor de la interfaz** (`interfaz/iniciar.sh`). Nunca queda un conector conectado sin una interfaz que responda detrás:
 
-1. Agregar el dominio a Cloudflare: **Add a domain** → plan **Free** → cambiar los *nameservers* del dominio, en la página donde se compró, por los dos que muestra Cloudflare. Esperar a que el dominio aparezca como **Active**.
-2. Crear el túnel: **Zero Trust** → **Networks** → **Tunnels** → **Create a tunnel** → **Cloudflared** → nombre `ventas`.
-3. En la pantalla de instalación, copiar el **token**: es el texto largo que empieza por `eyJ`, al final del comando de ejemplo. No hace falta instalar nada: el conector corre en Docker.
-4. **Public Hostname** → subdominio `ventas`, dominio el propio, **Service** `HTTP` y URL `localhost:8080` → **Save tunnel**.
-5. Pasar el token al grupo por un canal privado. Quien tiene el token puede conectar equipos al túnel.
+- Si se cae la interfaz o el conector, se detiene el otro y Docker vuelve a encender el contenedor.
+- Al apagar el contenedor, primero se desconecta el conector y después se detiene la interfaz.
 
-En **cada computador**:
+El túnel, la dirección `ventas.sistemasdistribuidos.me` y el token ya están creados. En **cada computador** solo hay que:
 
-1. Agregar al `.env`:
+1. Agregar al `.env` el token, que es el mismo en los tres y se pide por un chat privado, porque quien lo tiene puede conectar equipos al túnel. Cambiar también `ENTRADAS`:
 
    ```ini
-   COMPOSE_PROFILES=tunel
-   TUNNEL_TOKEN=eyJ...el-mismo-token-en-los-tres...
-   ENTRADAS=https://ventas.tudominio.com
+   ENTRADAS=https://ventas.sistemasdistribuidos.me
+   TUNNEL_TOKEN=eyJ...
    ```
 
 2. Aplicar el cambio:
 
    ```powershell
-   docker compose -f docker-compose.nodo.yml up -d
-   docker logs tunel
+   git pull
+   docker compose -f docker-compose.nodo.yml up -d --build
+   docker logs servicio-interfaz
    ```
 
-   En el registro debe aparecer `Registered tunnel connection` (cuatro veces). En Cloudflare, el túnel `ventas` pasa a **Healthy** y en **Connectors** aparecen los tres computadores.
+   En el registro debe aparecer `Registered tunnel connection` cuatro veces.
 
 3. Si estaba activo, apagar el enlace de Tailscale, que ya no se usa: `tailscale funnel --bg off`. Tailscale sigue siendo necesario para que los computadores se comuniquen entre sí.
 
-**Prueba:** abrir `https://ventas.tudominio.com`, mirar en el diagrama qué computador atiende (nodo "Interfaz") y apagar ese computador con `docker compose -f docker-compose.nodo.yml stop`. En pocos segundos la misma dirección responde desde otro computador. Funciona también para alguien que abre el enlace por primera vez después de la caída.
+Para ver los conectores del túnel, en el computador que tiene el certificado de Cloudflare:
+
+```powershell
+docker run --rm -v ${HOME}/.cloudflared:/home/nonroot/.cloudflared cloudflare/cloudflared:2026.9.1 tunnel info ventas
+```
+
+**Prueba:** abrir el enlace. En el diagrama, el nodo "Interfaz" muestra qué computador atiende. Apagar ese computador con `docker compose -f docker-compose.nodo.yml stop` o cerrando Docker. La misma dirección sigue respondiendo desde otro computador. Si se apaga de golpe, Cloudflare tarda unos 7 s en notarlo; la página reintenta sola durante ese tiempo.
+
+**Cómo se creó el túnel**, por si hay que repetirlo con otro dominio. El dominio debe estar agregado a Cloudflare; los comandos se ejecutan una sola vez, en un computador:
+
+```powershell
+$CF = "docker run --rm -v ${HOME}/.cloudflared:/home/nonroot/.cloudflared cloudflare/cloudflared:2026.9.1"
+Invoke-Expression "$CF tunnel login"          # abre un enlace: elegir el dominio y Authorize
+Invoke-Expression "$CF tunnel create ventas"
+Invoke-Expression "$CF tunnel route dns ventas ventas.sistemasdistribuidos.me"
+Invoke-Expression "$CF tunnel token ventas"   # el token que va en TUNNEL_TOKEN
+```
 
 ---
 
@@ -463,5 +476,4 @@ En la salida de `curl`, las tildes aparecen como `í`, `á`, etc. Es la forma es
 | Todas las compras responden 503 "La base de datos no está disponible" | Quedan menos de 2 nodos de la base | Encender otro nodo; el sistema se recupera solo |
 | Se quieren borrar todos los datos y empezar de cero | Los datos persisten en volúmenes | `docker compose down -v` y luego `docker compose up -d` |
 | Los cambios en `app.py` no se reflejan | La imagen no se reconstruyó | `docker compose up -d --build` |
-| El enlace de Cloudflare muestra el error 1033 o 530 | Ningún conector está conectado | `docker logs tunel` en cada equipo. Revisar que `COMPOSE_PROFILES=tunel` y el `TUNNEL_TOKEN` estén en el `.env` y que el contenedor `tunel` aparezca en `docker ps` |
-| El enlace de Cloudflare muestra 502 | El conector está, pero no llega a la interfaz | En el Public Hostname del túnel, el servicio debe ser `http://localhost:8080` |
+| El enlace de Cloudflare muestra un error (502, 530 o 1033) | Ningún computador tiene el conector activo | `docker logs servicio-interfaz` en cada equipo: debe decir `Registered tunnel connection`. Revisar que `TUNNEL_TOKEN` esté en el `.env` y volver a ejecutar `docker compose -f docker-compose.nodo.yml up -d` |

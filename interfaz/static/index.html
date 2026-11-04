@@ -652,7 +652,9 @@ const SIN_COMPUTADOR = [502, 530];
 async function pedir(ruta, opciones) {
   // Con una sola entrada (un enlace con varios conectores, como Cloudflare
   // Tunnel) se reintenta: el túnel envía el reintento a otro computador vivo.
-  const intentos = Math.max(entradas.length, 3);
+  // Si un computador se apaga de golpe, Cloudflare tarda unos 7 s en notarlo:
+  // 6 intentos separados por 1.5 s cubren esa espera.
+  const intentos = entradas.length > 1 ? entradas.length : 6;
   for (let intento = 0; intento < intentos; intento++) {
     try {
       const respuesta = await fetch(`${entradas[actual]}${ruta}`, opciones);
@@ -662,7 +664,7 @@ async function pedir(ruta, opciones) {
       actual = (actual + 1) % entradas.length;
       mostrarEntrada();
     } else {
-      await new Promise((r) => setTimeout(r, 700));
+      await new Promise((r) => setTimeout(r, 1500));
     }
   }
   throw new Error("ninguna entrada responde");

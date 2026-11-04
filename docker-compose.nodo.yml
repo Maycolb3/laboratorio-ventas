@@ -65,26 +65,11 @@ services:
     environment:
       <<: *entorno
       ENTRADAS: ${ENTRADAS:-}
-
-  # Un solo enlace público para todo el sistema (Cloudflare Tunnel).
-  # Los tres computadores corren el MISMO túnel (mismo TUNNEL_TOKEN): Cloudflare
-  # envía cada visita a un conector vivo, así que si cae un computador el
-  # enlace sigue funcionando con los otros dos. Se activa con
-  # COMPOSE_PROFILES=tunel en el .env (ver README, paso 11).
-  tunel:
-    image: cloudflare/cloudflared:2026.9.1
-    container_name: tunel
-    profiles: [tunel]
-    command: tunnel --no-autoupdate run
-    environment:
+      # Un solo enlace público para todo el sistema (Cloudflare Tunnel, README
+      # paso 11). Los tres computadores usan el MISMO token: Cloudflare envía
+      # cada visita a un conector vivo. El conector corre dentro de este mismo
+      # contenedor, así que si la interfaz se cae, su conector también.
       TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
-    # Comparte la red del contenedor de la interfaz: si la interfaz se cae,
-    # el conector pierde la red, se desconecta y Cloudflare deja de enviarle
-    # visitas. En el panel de Cloudflare el servicio es http://localhost:8080.
-    network_mode: service:interfaz
-    depends_on:
-      interfaz: {condition: service_started, restart: true}
-    restart: unless-stopped
 
 volumes:
   datos:
