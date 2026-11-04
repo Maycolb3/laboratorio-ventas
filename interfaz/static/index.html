@@ -66,7 +66,7 @@
   .punto.arriba { background: var(--ok); } .punto.parcial { background: var(--aviso); } .punto.abajo { background: var(--error); }
 
   /* ---------- Bento ---------- */
-  .bento { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px; }
+  .bento { padding-bottom: 40px; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px; }
   .bloque { background: var(--superficie); border: 1px solid var(--linea); border-radius: 22px; padding: 22px 24px; min-width: 0; position: relative; }
   .bloque-cabeza { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
   .bloque-cabeza h2 { font-size: 22px; }
@@ -274,9 +274,6 @@
   .registro .s-usuarios { --c: #8ea6ff; } .registro .s-productos { --c: #48d3bd; } .registro .s-pedidos { --c: #f58bbd; } .registro .s-interfaz { --c: #8f95a8; }
   @media (max-width: 560px) { .registro li { grid-template-columns: 44px minmax(0, 1fr) auto; } .registro .hora { display: none; } }
 
-  footer { padding: 24px 0 40px; font-size: 12px; color: var(--tenue); display: flex; gap: 8px 18px; flex-wrap: wrap; }
-  footer span { display: inline-flex; align-items: center; gap: 6px; }
-  footer i { width: 9px; height: 9px; border-radius: 3px; background: var(--c); display: inline-block; }
 
   @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 </style>
@@ -503,13 +500,6 @@
     </section>
   </main>
 
-  <footer>
-    <span><i style="--c: var(--usuarios)"></i>usuarios :8001</span>
-    <span><i style="--c: var(--productos)"></i>productos :8002</span>
-    <span><i style="--c: var(--pedidos)"></i>pedidos :8000</span>
-    <span><i style="--c: var(--bd)"></i>base de datos rqlite :4001</span>
-    <span>interfaz :8080</span>
-  </footer>
 </div>
 
 <script>
