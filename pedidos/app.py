@@ -22,16 +22,10 @@ import replicas
 app = Flask(__name__)
 
 
-def lista(nombre, por_defecto):
-    """Lee una lista de URL separadas por coma (la réplica más cercana primero)."""
-    valor = os.environ.get(nombre) or os.environ.get(nombre[:-1], por_defecto)
-    return [url.strip() for url in valor.split(",") if url.strip()]
-
-
-# Réplicas de los otros servicios. Ejemplo en el computador A:
-# USUARIOS_URLS=http://usuarios:8001,http://100.76.106.78:8001,http://100.94.112.43:8001
-USUARIOS_URLS = lista("USUARIOS_URLS", "http://usuarios:8001")
-PRODUCTOS_URLS = lista("PRODUCTOS_URLS", "http://productos:8002")
+# Réplicas de los otros servicios, la de este computador primero (ver
+# replicas.lista): en el despliegue se arman con NODOS y MI_IP.
+USUARIOS_URLS = replicas.lista("USUARIOS_URLS", "http://usuarios:8001", 8001)
+PRODUCTOS_URLS = replicas.lista("PRODUCTOS_URLS", "http://productos:8002", 8002)
 # (conectar, responder): una réplica apagada se detecta en 1.5 s; una que
 # responde tiene hasta 45 s. Descontar hace una escritura y una lectura en la
 # base, y cada una puede esperar a que se elija un líder (comun/bd.py).

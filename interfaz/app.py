@@ -24,13 +24,13 @@ def lista(nombre, por_defecto):
 
 
 # Réplicas de cada servicio, la más cercana primero: el nombre del servicio en
-# este computador y luego la IP de los otros computadores (ver README).
+# este computador y luego la IP de los otros computadores (replicas.lista).
 SERVICIOS = {
-    "usuarios": lista("USUARIOS_URLS", "http://usuarios:8001"),
-    "productos": lista("PRODUCTOS_URLS", "http://productos:8002"),
-    "pedidos": lista("PEDIDOS_URLS", "http://pedidos:8000"),
+    "usuarios": replicas.lista("USUARIOS_URLS", "http://usuarios:8001", 8001),
+    "productos": replicas.lista("PRODUCTOS_URLS", "http://productos:8002", 8002),
+    "pedidos": replicas.lista("PEDIDOS_URLS", "http://pedidos:8000", 8000),
 }
-DB_URLS = lista("DB_URLS", "http://rqlite:4001")
+DB_URLS = replicas.lista("DB_URLS", "http://rqlite:4001", 4001)
 # Direcciones públicas de la interfaz en cada computador (enlaces de Tailscale
 # Funnel). La página las usa para cambiar de entrada si cae la suya.
 ENTRADAS = lista("ENTRADAS", "")
@@ -85,7 +85,8 @@ def nodos_bd():
         replicas.marcar_sana(url)
         # Un nodo que no responde no trae api_addr: se muestra su dirección de replicación.
         return [{"id": n["id"], "direccion": n.get("api_addr") or n.get("addr"),
-                 "ok": n.get("reachable", False), "lider": n.get("leader", False)} for n in nodos]
+                 "ok": n.get("reachable", False), "lider": n.get("leader", False),
+                 "votante": n.get("voter", True)} for n in nodos]
     return []
 
 

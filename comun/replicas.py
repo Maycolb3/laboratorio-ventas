@@ -5,6 +5,7 @@ y esperaría a que se agote el tiempo antes de pasar al siguiente. Con esto,
 solo la primera petición después de una caída paga esa espera; durante los
 siguientes segundos se va directo a las réplicas que sí responden.
 """
+import os
 import threading
 import time
 
@@ -12,6 +13,25 @@ import requests
 import urllib3
 
 OLVIDO = 15  # segundos que una réplica caída queda al final de la lista
+
+
+def lista(variable, local, puerto):
+    """Réplicas de un servicio, la de este computador primero.
+
+    - Si la variable está definida (por ejemplo USUARIOS_URLS=…), se usa tal
+      cual. Así la configura la simulación en un solo computador
+      (docker-compose.yml).
+    - Si no, se arma con NODOS (las IP de todos los computadores, separadas por
+      coma) y MI_IP: la réplica local por su nombre en Docker y la de cada
+      uno de los demás computadores por su IP. Agregar un computador al
+      sistema es agregar su IP a NODOS.
+    """
+    valor = os.environ.get(variable) or os.environ.get(variable[:-1])
+    if valor:
+        return [url.strip() for url in valor.split(",") if url.strip()]
+    mi_ip = os.environ.get("MI_IP", "").strip()
+    otros = [ip.strip() for ip in os.environ.get("NODOS", "").split(",") if ip.strip() and ip.strip() != mi_ip]
+    return [local] + [f"http://{ip}:{puerto}" for ip in otros]
 
 
 def no_llego(error):

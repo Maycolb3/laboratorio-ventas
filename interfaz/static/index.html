@@ -707,8 +707,10 @@ async function revisarCluster() {
 
   // Base de datos
   const nodos = c.bd || [];
-  const esperados = nodos.length || 3;
-  const okBd = nodos.filter((n) => n.ok).length;
+  // La mayoría se cuenta solo entre los nodos que votan (2 de 3, 3 de 5).
+  const votantes = nodos.filter((n) => n.votante !== false);
+  const esperados = votantes.length || 3;
+  const okBd = votantes.filter((n) => n.ok).length;
   const necesarios = Math.floor(esperados / 2) + 1;
   const lider = nodos.find((n) => n.lider);
   const bdEnLinea = okBd >= necesarios;
@@ -717,10 +719,11 @@ async function revisarCluster() {
   const estadoBd = $("raft-estado");
   estadoBd.className = `bd-estado ${okBd === esperados ? "" : bdEnLinea ? "parcial" : "abajo"}`;
   estadoBd.textContent = bdEnLinea ? `${okBd} de ${esperados} nodos vivos` : "sin mayoría";
+  $("raft-lista").style.gridTemplateColumns = `repeat(${Math.max(nodos.length, 1)}, minmax(0, 1fr))`;
   $("raft-lista").innerHTML = nodos.length === 0 ? `<li class="mal"><b>—</b><small>ningún nodo responde</small></li>`
     : nodos.map((n) => `<li class="${n.ok ? "" : "mal"}${n.lider ? " lider" : ""}" title="${escapar(n.id)}">
         <b><span class="punto"></span>${escapar(letra(n.id))}</b>
-        <small>${n.ok ? (n.lider ? "★ líder" : "activo") : "caído"}</small></li>`).join("");
+        <small>${!n.ok ? "caído" : n.lider ? "★ líder" : n.votante === false ? "respaldo" : "activo"}</small></li>`).join("");
   $("tramos").innerHTML = Array.from({ length: esperados }, (_, i) => `<i class="${i < okBd ? "lleno" : ""}"></i>`).join("");
   $("mayoria-texto").textContent = lider
     ? `Líder actual: nodo ${letra(lider.id)}. El sistema sigue funcionando mientras haya ${necesarios} de ${esperados} nodos vivos.`

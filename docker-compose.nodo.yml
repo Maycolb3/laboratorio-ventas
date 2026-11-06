@@ -1,18 +1,19 @@
-# Un nodo del sistema distribuido. Los TRES computadores usan este mismo
+# Un nodo del sistema distribuido. TODOS los computadores usan este mismo
 # archivo; lo único que cambia es el .env de cada uno (ver .env.ejemplo).
 # Cada computador corre un nodo de la base de datos y una réplica de cada
-# servicio, así que si uno se apaga los otros dos siguen atendiendo.
+# servicio, así que si uno se apaga los demás siguen atendiendo.
 # Uso: docker compose -f docker-compose.nodo.yml up -d --build
 name: ventas-nodo
 
+# NODOS = las IP de Tailscale de todos los computadores, separadas por coma
+# (la misma línea en todos los .env). Si un .env viejo no la tiene, se arma
+# con MI_IP, IP_OTRO_1 e IP_OTRO_2, como cuando eran tres.
 # Cada servicio usa primero la réplica de su propio computador y, si no
-# responde, las de los otros dos (por su IP de Tailscale).
+# responde, las de los demás (comun/replicas.py arma la lista con NODOS).
 x-entorno: &entorno
-  NODO: ${NODO:?Falta NODO en el archivo .env (A, B o C)}
-  DB_URLS: http://rqlite:4001,http://${IP_OTRO_1}:4001,http://${IP_OTRO_2}:4001
-  USUARIOS_URLS: http://usuarios:8001,http://${IP_OTRO_1}:8001,http://${IP_OTRO_2}:8001
-  PRODUCTOS_URLS: http://productos:8002,http://${IP_OTRO_1}:8002,http://${IP_OTRO_2}:8002
-  PEDIDOS_URLS: http://pedidos:8000,http://${IP_OTRO_1}:8000,http://${IP_OTRO_2}:8000
+  NODO: ${NODO:?Falta NODO en el archivo .env (A, B, C, D o E)}
+  MI_IP: ${MI_IP:?Falta MI_IP en el archivo .env}
+  NODOS: ${NODOS:-${MI_IP},${IP_OTRO_1},${IP_OTRO_2}}
 
 x-servicio: &servicio
   restart: unless-stopped
@@ -22,16 +23,23 @@ services:
   rqlite:
     image: rqlite/rqlite:10.6.0
     container_name: bd
-    # La primera vez, la base espera a los tres nodos y elige un líder.
-    # Después basta con que estén dos de tres.
+    # Todos los nodos votan: el líder confirma cada escritura cuando la guardó
+    # la mayoría (2 de 3, 3 de 5). Un nodo nuevo se une solo al clúster que
+    # ya existe y recibe una copia completa de los datos.
+    # La primera vez que se crea el clúster, la base espera a tres nodos para
+    # elegir el primer líder; los demás se unen después.
     # Tiempos de Raft para internet: entre computadores por Tailscale la ida y
     # vuelta puede pasar de 200 ms. Con el valor por defecto (1 s) los nodos se
     # pierden de vista por momentos y repiten la elección de líder sin parar.
-    command: >-
-      -bootstrap-expect 3
-      -raft-heartbeat-timeout 3s -raft-election-timeout 3s
-      -join ${MI_IP:?Falta MI_IP en el archivo .env}:4002,${IP_OTRO_1:?Falta IP_OTRO_1 en el archivo .env}:4002,${IP_OTRO_2:?Falta IP_OTRO_2 en el archivo .env}:4002
+    # -join se arma con NODOS: "ip1,ip2" -> "ip1:4002,ip2:4002".
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        UNIR=$$(echo "$$NODOS" | sed 's/ //g; s/,/:4002,/g; s/$$/:4002/');
+        exec docker-entrypoint.sh -bootstrap-expect 3
+        -raft-heartbeat-timeout 3s -raft-election-timeout 3s -join "$$UNIR"
     environment:
+      NODOS: ${NODOS:-${MI_IP},${IP_OTRO_1},${IP_OTRO_2}}
       NODE_ID: nodo-${NODO}
       HTTP_ADV_ADDR: ${MI_IP}:4001   # dirección con la que lo encuentran los otros nodos
       RAFT_ADV_ADDR: ${MI_IP}:4002

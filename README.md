@@ -39,7 +39,7 @@ Después de cada `git pull` que traiga cambios en el código, reconstruir los co
 
 ## Arquitectura
 
-En el despliegue real, **los tres computadores son iguales**: cada uno corre un nodo de la base de datos y una réplica de cada servicio. Cada servicio usa primero la réplica de su propio computador y, si no responde, la de otro.
+En el despliegue real, **todos los computadores son iguales**: cada uno corre un nodo de la base de datos y una réplica de cada servicio. Cada servicio usa primero la réplica de su propio computador y, si no responde, la de otro. El diagrama muestra tres; con cinco (D: máquina virtual con Kali Linux, E: Mac) es igual, y los cinco votan en la base (paso 10).
 
 ```mermaid
 flowchart LR
@@ -91,8 +91,9 @@ Códigos de respuesta de `POST /pedidos`: 201 pedido creado, 400 datos inválido
 ### Base de datos distribuida (rqlite)
 
 - **Los datos no se pierden.** rqlite guarda la base SQLite en disco, en un volumen de Docker. Apagar o reiniciar los contenedores no borra nada. Solo `docker compose down -v` borra los datos, porque elimina los volúmenes.
-- **Hay tres copias sincronizadas.** Cada escritura la recibe el nodo **líder**, que la envía a los otros dos con el algoritmo de consenso **Raft**. Se confirma cuando la mayoría (2 de 3) la guardó, así que todos los nodos tienen la misma información.
-- **Si cae un nodo, la base sigue.** Si se cae el líder, los otros dos eligen uno nuevo en pocos segundos. Con 2 de 3 nodos todo funciona. Con 1 de 3 no hay mayoría: la base deja de aceptar cambios para no quedar inconsistente, y el sistema responde 503 hasta que vuelva otro nodo.
+- **Hay una copia sincronizada en cada computador.** Cada escritura la recibe el nodo **líder**, que la envía a los demás con el algoritmo de consenso **Raft**. Se confirma cuando la mayoría la guardó (2 de 3 con tres computadores, 3 de 5 con cinco), así que todos los nodos tienen la misma información.
+- **Si caen nodos, la base sigue mientras haya mayoría.** Si se cae el líder, los demás eligen uno nuevo en pocos segundos. Con tres computadores se aguanta perder 1; con cinco, perder 2. Sin mayoría (1 de 3, o 2 de 5) la base deja de aceptar cambios para no quedar inconsistente, y el sistema responde 503 hasta que vuelva otro nodo.
+- **Nunca cuatro votantes.** Con cuatro se necesitan 3 vivos: se aguanta perder solo 1, igual que con tres, pero con más piezas que pueden fallar.
 - **Las lecturas son linealizables** (`level=linearizable`): las atiende el líder después de confirmar con la mayoría que sigue siéndolo, así que nunca devuelven un dato viejo. A diferencia de `level=strong`, no se escriben en el registro de Raft, lo que reduce a la mitad el tráfico entre computadores en las ráfagas de compras.
 - **Si se está eligiendo un líder**, cada consulta reintenta hasta 15 s antes de responder que la base no está disponible. Por internet, una elección puede tardar varios segundos.
 - **Cada servicio maneja su propia tabla**: `usuarios`, `productos`, `operaciones` y `pedidos`. Los servicios no guardan nada en memoria; por eso cualquier réplica puede atender cualquier petición.
@@ -116,7 +117,7 @@ Códigos de respuesta de `POST /pedidos`: 201 pedido creado, 400 datos inválido
 - **Memoria de réplicas caídas.** La réplica que falló pasa al final de la lista durante 15 s. Así, solo la primera petición después de una caída paga la espera.
 - **Sin descuentos dobles.** Cada descuento lleva un identificador de operación único. Si pedidos reintenta en otra réplica de productos, la operación no se descuenta dos veces. Si no se sabe si se aplicó, pedidos la revierte (`POST /operaciones/<id>/revertir`), y revertir dos veces tampoco suma unidades de más.
 - **Escrituras sin confirmar.** Una escritura solo se repite en otro nodo o réplica si la petición no alcanzó a llegar (no hubo conexión). Si llegó pero la respuesta no volvió a tiempo, por ejemplo durante un cambio de líder, pudo haberse aplicado: no se repite, para no guardar dos veces el mismo registro ni crear dos pedidos por una compra. En ese caso la respuesta dice "No se pudo confirmar si el cambio se guardó" y hay que revisar los datos antes de repetir. Al modificar, si el cambio se guardó y solo falla leerlo de vuelta, la respuesta es correcta igual.
-- **Un solo enlace público (Cloudflare Tunnel).** Los tres computadores corren el mismo túnel. Cloudflare envía cada visita a un conector vivo: si cae un computador, el enlace sigue funcionando con los otros dos, sin que nadie cambie de dirección (paso 11). El conector corre dentro del contenedor de la interfaz, así que si solo cae la interfaz de un equipo, ese conector también se desconecta.
+- **Un solo enlace público (Cloudflare Tunnel).** Todos los computadores corren el mismo túnel. Cloudflare envía cada visita a un conector vivo: si cae un computador, el enlace sigue funcionando con los demás, sin que nadie cambie de dirección (paso 11). El conector corre dentro del contenedor de la interfaz, así que si solo cae la interfaz de un equipo, ese conector también se desconecta.
 - **Alternativa con un enlace por computador (Tailscale Funnel).** La página conoce las tres entradas (`ENTRADAS`): si la suya deja de responder, sigue sola por otra y lo indica arriba a la derecha. Solo sirve para una página que ya estaba abierta.
 
 ## Estructura de archivos
@@ -124,7 +125,7 @@ Códigos de respuesta de `POST /pedidos`: 201 pedido creado, 400 datos inválido
 ```
 laboratorio-ventas/
 ├── docker-compose.yml        # todo en un computador, simulando el clúster
-├── docker-compose.nodo.yml   # un nodo del despliegue real (igual en los tres computadores)
+├── docker-compose.nodo.yml   # un nodo del despliegue real (igual en todos los computadores)
 ├── .env.ejemplo              # plantilla del .env de cada computador
 ├── comun/
 │   ├── bd.py                 # cliente de rqlite con cambio automático de nodo
@@ -141,7 +142,7 @@ Las imágenes se construyen desde la raíz del repositorio, para que cada una co
 
 - Docker Desktop instalado y **abierto** (el ícono de la ballena debe indicar que está en ejecución).
 - Windows 10/11 con PowerShell, o macOS (Intel o Apple Silicon) con Terminal.
-- Puertos 4001, 8000, 8001, 8002, 8080 y 8081 libres. En el despliegue en tres computadores también el 4002.
+- Puertos 4001, 8000, 8001, 8002, 8080 y 8081 libres. En el despliegue en varios computadores también el 4002.
 
 Comprobar Docker:
 
@@ -355,31 +356,65 @@ docker compose exec productos-1 uname -r
 
 Resultado esperado: cada contenedor tiene su propia IP. Pedidos llega a `usuarios-2` por su nombre de servicio. La llamada a `localhost` falla con `Connection refused`, porque dentro del contenedor `localhost` es el propio contenedor. Los dos `uname -r` muestran el mismo kernel, el de la máquina virtual ligera de Docker Desktop.
 
-## Paso 10. Despliegue real en tres computadores
+## Paso 10. Despliegue real en cinco computadores
 
-Los tres computadores usan **el mismo archivo**, `docker-compose.nodo.yml`. Cada uno corre un nodo de la base y una réplica de cada servicio. Solo cambia el `.env`.
+Todos los computadores usan **el mismo archivo**, `docker-compose.nodo.yml`. Cada uno corre un nodo de la base y una réplica de cada servicio. Solo cambia el `.env`.
 
-1. **Una sola red de Tailscale.** Los tres equipos deben estar en la misma red de Tailscale (la misma cuenta, o invitados a la misma red) y verse entre sí. Cada uno anota su IP con `tailscale ip -4`.
-2. **Firewall.** En cada Windows, abrir los puertos en PowerShell como administrador:
+| Nodo | Equipo |
+|------|--------|
+| A, B, C | Computadores con Windows y Docker Desktop |
+| D | Máquina virtual con Kali Linux y Docker Engine |
+| E | Mac con Docker Desktop |
 
-   ```powershell
-   New-NetFirewallRule -DisplayName "Laboratorio ventas" -Direction Inbound -Protocol TCP -LocalPort 4001,4002,8000,8001,8002,8080 -Action Allow -Profile Any
-   ```
+Los cinco **votan** en la base: se necesitan 3 de 5 encendidos y se aguanta que se apaguen 2. Por eso los cinco deben estar encendidos durante las pruebas y la exposición. Si solo se usan A, B y C, todo funciona igual, con la regla de 2 de 3.
 
-3. **Archivo `.env`** en cada computador:
+1. **Una sola red de Tailscale.** Cada computador habla directo con cada uno de los otros (Raft y el relevo de servicios), así que todos deben verse entre sí. Si usan cuentas distintas, cada equipo nuevo se comparte con todos los demás y al revés; es más simple tener los cinco equipos en una misma red. Cada uno anota su IP con `tailscale ip -4`.
+2. **Docker y firewall en cada equipo.** Los puertos son 4001, 4002, 8000, 8001, 8002 y 8080.
+   - **Windows (A, B, C):** Docker Desktop abierto. Abrir los puertos en PowerShell como administrador:
+
+     ```powershell
+     New-NetFirewallRule -DisplayName "Laboratorio ventas" -Direction Inbound -Protocol TCP -LocalPort 4001,4002,8000,8001,8002,8080 -Action Allow -Profile Any
+     ```
+
+   - **Kali Linux en máquina virtual (D):**
+     - La VM debe correr en un computador que **no** sea otro nodo: si su anfitrión se apaga, caen dos nodos a la vez.
+     - Darle unos 4 GB de RAM, 2 CPU y 20 GB de disco, y desactivar la suspensión de la VM y del anfitrión. Docker no necesita virtualización anidada: los contenedores no son máquinas virtuales.
+     - Instalar Docker, Git y Tailscale dentro de la VM:
+
+       ```bash
+       sudo apt update && sudo apt install -y docker.io docker-compose git curl
+       sudo systemctl enable --now docker
+       sudo usermod -aG docker $USER      # luego cerrar sesión y volver a entrar
+       curl -fsSL https://tailscale.com/install.sh | sh
+       sudo tailscale up
+       ```
+
+     - Si `docker compose version` no responde, usar `docker-compose` (con guion) en los comandos de esta guía.
+     - Kali no trae el firewall activo. Si usan `ufw`, abrir los mismos puertos: `sudo ufw allow 4001:4002/tcp` y `sudo ufw allow 8000:8002/tcp` y `sudo ufw allow 8080/tcp`.
+   - **Mac (E):**
+     - Docker Desktop para Mac abierto. Sirve en Apple Silicon y en Intel: todas las imágenes del proyecto tienen las dos versiones.
+     - Tailscale con la app de macOS. Si macOS pregunta por conexiones entrantes, aceptarlas.
+     - Evitar que se duerma mientras sea nodo: dejar abierta una terminal con `caffeinate -dims`, o ajustar la energía. Un MacBook con la tapa cerrada se suspende y su nodo desaparece.
+3. **Archivo `.env`** en cada computador. En Windows:
 
    ```powershell
    Copy-Item .env.ejemplo .env
    notepad .env
    ```
 
-   Poner `NODO` (A, B o C), `MI_IP` (la IP de ese equipo), `IP_OTRO_1` e `IP_OTRO_2` (las de los otros dos) y, cuando estén creados, los tres enlaces públicos en `ENTRADAS`. `.env` está en `.gitignore`, porque cambia en cada equipo.
+   En Kali o Mac: `cp .env.ejemplo .env` y `nano .env`.
 
-4. **Levantar los tres a la vez.** La primera vez la base espera a los tres nodos para elegir un líder:
+   Poner `NODO` (A, B, C, D o E), `MI_IP` (la IP de ese equipo) y `NODOS`, con las IP de **todos** los computadores separadas por coma: es la misma línea en los cinco. Además `ENTRADAS` y `TUNNEL_TOKEN` (paso 11). `.env` está en `.gitignore`, porque cambia en cada equipo. Un `.env` de antes, con `IP_OTRO_1` e `IP_OTRO_2` y sin `NODOS`, sigue funcionando como tres computadores.
+
+4. **Levantar el nodo** en cada computador:
 
    ```powershell
    docker compose -f docker-compose.nodo.yml up -d --build
    ```
+
+   - **Si A, B y C ya estaban corriendo:** primero poner en sus `.env` la línea `NODOS` con las cinco IP y repetir el comando en los tres, para que sus servicios conozcan a D y E. Después levantar D y E: se unen solos al clúster como votantes y reciben una copia completa de los datos.
+   - **Si el clúster se crea desde cero** (por ejemplo, después de `down -v` en todos): la base espera a tres nodos para elegir el primer líder. Levantar primero A, B y C, y después D y E.
+   - **Comprobar:** la tarjeta "Vida de los nodos" debe decir "5 de 5 nodos vivos". También se puede ver con `curl http://localhost:4001/nodes?pretty`.
 
 5. **Publicar la interfaz** con un solo enlace para todo el sistema: ver el paso 11 (Cloudflare Tunnel). Alternativa sin dominio, con un enlace por computador:
 
@@ -387,15 +422,23 @@ Los tres computadores usan **el mismo archivo**, `docker-compose.nodo.yml`. Cada
    tailscale funnel --bg 8080
    ```
 
-   En ese caso, copiar los tres enlaces `https://…ts.net` en `ENTRADAS` del `.env` de cada equipo y aplicar el cambio con `docker compose -f docker-compose.nodo.yml up -d`.
+   En ese caso, copiar todos los enlaces `https://…ts.net` en `ENTRADAS` del `.env` de cada equipo y aplicar el cambio con `docker compose -f docker-compose.nodo.yml up -d`.
 
-**Prueba de la tolerancia a fallos:** abrir el enlace, apagar Docker o el computador C completo, y seguir comprando. El enlace sigue respondiendo con A o B, la base sigue con 2 de 3 nodos y los pedidos los atienden las réplicas de A y B. En la interfaz, el nodo "Interfaz" del diagrama muestra qué computador está atendiendo. Al encender C de nuevo, su nodo se pone al día solo con los datos que se escribieron mientras estaba apagado.
+6. **Retirar un computador para siempre.** Un votante que ya no existe sigue contando para la mayoría, así que hay que sacarlo del clúster desde cualquier nodo vivo (en el ejemplo, el nodo E):
+
+   ```powershell
+   Invoke-RestMethod -Method Delete -Uri http://localhost:4001/remove -Body '{"id":"nodo-E"}'
+   ```
+
+   En Kali o Mac: `curl -XDELETE http://localhost:4001/remove -d '{"id":"nodo-E"}'`. Luego quitar su IP de `NODOS` en los demás `.env` y repetir el paso 4.
+
+**Prueba de la tolerancia a fallos:** con los cinco encendidos, abrir el enlace y apagar dos computadores completos (por ejemplo D y E, o B y C). La base sigue con 3 de 5, el enlace responde desde otro computador y las compras siguen. Si se apaga un tercero, no hay mayoría y el sistema responde 503 hasta que vuelva uno. Al encender los apagados, cada nodo se pone al día solo con lo que se escribió mientras estaba apagado.
 
 ## Paso 11. Un solo enlace con Cloudflare Tunnel
 
 **Enlace del sistema: https://ventas.sistemasdistribuidos.me**
 
-Un túnel de Cloudflare puede tener varios **conectores**, hasta 25. Los tres computadores corren el mismo túnel (`ventas`) con el mismo token, y Cloudflare envía cada visita a un conector vivo. Así hay **una sola dirección** para todo el sistema, y sigue funcionando aunque se caiga cualquiera de los tres. Funciona también para alguien que abre el enlace por primera vez después de la caída.
+Un túnel de Cloudflare puede tener varios **conectores**, hasta 25. Todos los computadores corren el mismo túnel (`ventas`) con el mismo token, y Cloudflare envía cada visita a un conector vivo. Así hay **una sola dirección** para todo el sistema, y sigue funcionando aunque se caiga cualquiera de ellos. Funciona también para alguien que abre el enlace por primera vez después de la caída.
 
 El conector va **dentro del contenedor de la interfaz** (`interfaz/iniciar.sh`). Nunca queda un conector conectado sin una interfaz que responda detrás:
 
@@ -404,7 +447,7 @@ El conector va **dentro del contenedor de la interfaz** (`interfaz/iniciar.sh`).
 
 El túnel, la dirección `ventas.sistemasdistribuidos.me` y el token ya están creados. En **cada computador** solo hay que:
 
-1. Agregar al `.env` el token, que es el mismo en los tres y se pide por un chat privado, porque quien lo tiene puede conectar equipos al túnel. Cambiar también `ENTRADAS`:
+1. Agregar al `.env` el token, que es el mismo en todos y se pide por un chat privado, porque quien lo tiene puede conectar equipos al túnel. Cambiar también `ENTRADAS`:
 
    ```ini
    ENTRADAS=https://ventas.sistemasdistribuidos.me
@@ -474,7 +517,9 @@ En la salida de `curl`, las tildes aparecen como `í`, `á`, etc. Es la forma es
 |---|---|---|
 | `error during connect` o `Cannot connect to the Docker daemon` | Docker Desktop cerrado | Abrir Docker Desktop y esperar a que inicie |
 | `port is already allocated` | Otro programa o un sistema anterior usa 4001, 8000-8002, 8080 u 8081 | `docker ps` para ver quién lo usa y detenerlo, o cambiar el puerto izquierdo en `ports` |
-| Los servicios repiten "Esperando a la base de datos" | La base todavía no tiene líder; la primera vez necesita los tres nodos | Esperar o revisar `docker compose logs rqlite-1`; en tres computadores, que los tres estén encendidos y se vean por Tailscale |
+| Los servicios repiten "Esperando a la base de datos" | La base todavía no tiene líder; la primera vez necesita tres nodos | Esperar o revisar `docker compose logs rqlite-1`; en el despliegue real, que haya mayoría encendida (3 de 5) y que todos se vean por Tailscale |
+| "Vida de los nodos" no muestra a D o E | El nodo nuevo no alcanza a los demás, o los demás no tienen su IP en `NODOS` | Revisar que se vea por Tailscale con los cinco, el firewall y la línea `NODOS` en todos los `.env`; luego repetir el paso 4 |
+| En Kali, `docker compose` no existe | El paquete instala Compose como `docker-compose` | Usar `docker-compose` (con guion) en los comandos |
 | Todas las compras responden 503 "La base de datos no está disponible" | Quedan menos de 2 nodos de la base | Encender otro nodo; el sistema se recupera solo |
 | Un cambio responde "No se pudo confirmar si el cambio se guardó" | La base tardó en responder, por ejemplo mientras elegía líder | Recargar los datos y revisar si el cambio quedó antes de repetirlo |
 | Se quieren borrar todos los datos y empezar de cero | Los datos persisten en volúmenes | `docker compose down -v` y luego `docker compose up -d` |

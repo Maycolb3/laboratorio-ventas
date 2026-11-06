@@ -5,19 +5,18 @@ algoritmo de consenso Raft. Todas las escrituras pasan por el nodo líder, que
 las aplica una por una y en el mismo orden en todas las copias: por eso una
 transacción es atómica en todo el clúster y no solo dentro de un proceso.
 
-Mientras la mayoría de los nodos responda (2 de 3), la base sigue funcionando.
+Mientras la mayoría de los nodos responda (2 de 3, o 3 de 5), la base sigue funcionando.
 Si un nodo no contesta, este cliente prueba con el siguiente de la lista.
 """
-import os
 import time
 
 import requests
 
 import replicas
 
-# Nodos de la base de datos, el más cercano primero. Ejemplo:
-# DB_URLS=http://rqlite:4001,http://100.99.60.63:4001,http://100.76.106.78:4001
-NODOS = [url.strip() for url in os.environ.get("DB_URLS", "http://rqlite:4001").split(",") if url.strip()]
+# Nodos de la base de datos, el de este computador primero (ver replicas.lista):
+# DB_URLS explícita en la simulación, o armada con NODOS y MI_IP en el despliegue.
+NODOS = replicas.lista("DB_URLS", "http://rqlite:4001", 4001)
 # (conectar, responder): un computador apagado se detecta en 1.5 s. Responder
 # puede tardar varios segundos: por internet cada escritura espera la
 # confirmación de la mayoría, y más si hay un cambio de líder en curso.
