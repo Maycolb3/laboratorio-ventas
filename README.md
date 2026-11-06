@@ -362,7 +362,7 @@ Todos los computadores usan **el mismo archivo**, `docker-compose.nodo.yml`. Cad
 
 | Nodo | Equipo |
 |------|--------|
-| A, B, C | Computadores con Windows y Docker Desktop |
+| A, B, C | Computadores con Docker Desktop (Windows o Mac) |
 | D | Máquina virtual con Kali Linux y Docker Engine |
 | E | Mac con Docker Desktop |
 
