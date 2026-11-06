@@ -73,7 +73,7 @@ def salud_de(servicio, url):
         return {"url": url, "ok": False}
 
 
-def nodos_bd():
+def miembros_bd():
     """Pregunta a la base qué nodos tiene, cuáles responden y cuál es el líder."""
     for url in replicas.ordenar(DB_URLS):
         try:
@@ -88,6 +88,35 @@ def nodos_bd():
                  "ok": n.get("reachable", False), "lider": n.get("leader", False),
                  "votante": n.get("voter", True)} for n in nodos]
     return []
+
+
+def nodo_sin_unir(posicion, ip):
+    """Un computador de NODOS que todavía no está en el clúster de la base.
+
+    Si su base responde, se usa el nombre que ella misma dice tener (nodo-D);
+    si no, la letra que le toca por su posición en NODOS (A, B, C, D, E).
+    """
+    letra = "ABCDEFGHIJ"[posicion] if posicion < 10 else str(posicion + 1)
+    try:
+        estado = requests.get(f"http://{ip}:4001/status", timeout=(1, 2)).json()
+        nombre, encendido = estado["store"]["node_id"], True
+    except (requests.exceptions.RequestException, ValueError, KeyError, TypeError):
+        nombre, encendido = f"nodo-{letra}", False
+    return {"id": nombre, "direccion": f"http://{ip}:4001", "ok": False, "lider": False,
+            "votante": True, "sin_unir": True, "encendido": encendido}
+
+
+def nodos_bd():
+    """Los nodos del clúster y, en el despliegue, también los computadores de
+    NODOS que aún no se unen: así la página muestra siempre a los cinco."""
+    miembros = miembros_bd()
+    ips = [ip.strip() for ip in os.environ.get("NODOS", "").split(",") if ip.strip()]
+    en_cluster = {str(n["direccion"]).split("//")[-1].split(":")[0] for n in miembros}
+    faltan = [(i, ip) for i, ip in enumerate(ips) if ip not in en_cluster]
+    if faltan:
+        with ThreadPoolExecutor(max_workers=len(faltan)) as hilos:
+            miembros += list(hilos.map(lambda par: nodo_sin_unir(*par), faltan))
+    return sorted(miembros, key=lambda n: str(n["id"]))
 
 
 @app.get("/api/cluster")

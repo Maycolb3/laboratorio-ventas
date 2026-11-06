@@ -129,6 +129,9 @@
   .nodos-bd li.mal { border-style: dashed; border-color: color-mix(in srgb, var(--error) 60%, transparent); background: transparent; }
   .nodos-bd li.mal b, .nodos-bd li.mal small { color: var(--error); }
   .nodos-bd .punto { background: var(--ok); } .nodos-bd .mal .punto { background: var(--error); }
+  .nodos-bd li.sin-unir { border-style: dashed; background: transparent; }
+  .nodos-bd li.sin-unir b, .nodos-bd li.sin-unir small { color: var(--suave); }
+  .nodos-bd .sin-unir .punto { background: var(--suave); }
   .tramos { display: flex; gap: 4px; margin-bottom: 4px; }
   .tramos i { flex: 1; height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--bd) 18%, transparent); }
   .tramos i.lleno { background: var(--bd); }
@@ -708,7 +711,8 @@ async function revisarCluster() {
   // Base de datos
   const nodos = c.bd || [];
   // La mayoría se cuenta solo entre los nodos que votan (2 de 3, 3 de 5).
-  const votantes = nodos.filter((n) => n.votante !== false);
+  // Los computadores que aún no se unen al clúster se muestran, pero no votan.
+  const votantes = nodos.filter((n) => n.votante !== false && !n.sin_unir);
   const esperados = votantes.length || 3;
   const okBd = votantes.filter((n) => n.ok).length;
   const necesarios = Math.floor(esperados / 2) + 1;
@@ -721,13 +725,16 @@ async function revisarCluster() {
   estadoBd.textContent = bdEnLinea ? `${okBd} de ${esperados} nodos vivos` : "sin mayoría";
   $("raft-lista").style.gridTemplateColumns = `repeat(${Math.max(nodos.length, 1)}, minmax(0, 1fr))`;
   $("raft-lista").innerHTML = nodos.length === 0 ? `<li class="mal"><b>—</b><small>ningún nodo responde</small></li>`
-    : nodos.map((n) => `<li class="${n.ok ? "" : "mal"}${n.lider ? " lider" : ""}" title="${escapar(n.id)}">
+    : nodos.map((n) => `<li class="${n.sin_unir ? "sin-unir" : n.ok ? "" : "mal"}${n.lider ? " lider" : ""}" title="${escapar(n.id)}">
         <b><span class="punto"></span>${escapar(letra(n.id))}</b>
-        <small>${!n.ok ? "caído" : n.lider ? "★ líder" : n.votante === false ? "respaldo" : "activo"}</small></li>`).join("");
+        <small>${n.sin_unir ? (n.encendido ? "uniéndose" : "sin unir") : !n.ok ? "caído" : n.lider ? "★ líder" : n.votante === false ? "respaldo" : "activo"}</small></li>`).join("");
   $("tramos").innerHTML = Array.from({ length: esperados }, (_, i) => `<i class="${i < okBd ? "lleno" : ""}"></i>`).join("");
-  $("mayoria-texto").textContent = lider
+  const sinUnir = nodos.filter((n) => n.sin_unir).map((n) => letra(n.id));
+  const faltan = sinUnir.length === 0 ? ""
+    : ` Aún no se ${sinUnir.length === 1 ? "une" : "unen"} al clúster: ${sinUnir.join(", ").replace(/, ([^,]*)$/, " y $1")}.`;
+  $("mayoria-texto").textContent = (lider
     ? `Líder actual: nodo ${letra(lider.id)}. El sistema sigue funcionando mientras haya ${necesarios} de ${esperados} nodos vivos.`
-    : `Sin líder: se necesitan ${necesarios} de ${esperados} nodos vivos para seguir funcionando.`;
+    : `Sin líder: se necesitan ${necesarios} de ${esperados} nodos vivos para seguir funcionando.`) + faltan;
 
   // Conexiones del diagrama: cortadas si su destino no está disponible
   const cortadas = {
