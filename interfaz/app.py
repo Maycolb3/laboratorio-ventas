@@ -31,10 +31,30 @@ SERVICIOS = {
     "pedidos": replicas.lista("PEDIDOS_URLS", "http://pedidos:8000", 8000),
 }
 DB_URLS = replicas.lista("DB_URLS", "http://rqlite:4001", 4001)
+# Las interfaces de todos los computadores (la propia primero), solo para
+# mostrar en el diagrama en qué nodos está en línea.
+INTERFACES = replicas.lista("INTERFAZ_URLS", "http://localhost:8080", 8080)
 # Direcciones públicas de la interfaz en cada computador (enlaces de Tailscale
 # Funnel). La página las usa para cambiar de entrada si cae la suya.
 ENTRADAS = lista("ENTRADAS", "")
 NODO = os.environ.get("NODO", "local")
+# IP de Tailscale de todos los computadores, en orden A, B, C, D, E.
+NODO_IPS = [ip.strip() for ip in os.environ.get("NODOS", "").split(",") if ip.strip()]
+LETRAS = "ABCDEFGHIJ"
+
+
+def letra_de(url, posicion):
+    """Letra del computador al que pertenece una réplica (A, B, C...).
+
+    Las réplicas de otros computadores se reconocen por su IP en NODOS; la
+    local (por su nombre en Docker) es la de este computador. Sin NODOS (la
+    simulación en un solo computador) se numeran: 1, 2...
+    """
+    host = url.split("//")[-1].split("/")[0].split(":")[0]
+    if host in NODO_IPS:
+        i = NODO_IPS.index(host)
+        return LETRAS[i] if i < len(LETRAS) else str(i + 1)
+    return NODO if NODO_IPS else str(posicion + 1)
 # (conectar, responder): una réplica apagada se detecta en 1.5 s. Responder
 # tiene hasta 90 s: un pedido pasa por usuarios, productos y la base, y cada
 # paso puede esperar una elección de líder. Cloudflare corta a los 100 s.
@@ -58,36 +78,56 @@ def inicio():
     return app.send_static_file("index.html")
 
 
+@app.get("/salud")
+def salud():
+    return jsonify({"servicio": "interfaz", "estado": "en ejecución", "nodo": NODO})
+
+
 @app.get("/api/configuracion")
 def configuracion():
     return jsonify({"servicios": SERVICIOS, "bd": DB_URLS, "entradas": ENTRADAS, "nodo": NODO})
 
 
-def salud_de(servicio, url):
+def salud_de(servicio, url, posicion):
     inicio = time.perf_counter()
+    letra = letra_de(url, posicion)
     try:
         datos = requests.get(f"{url}/salud", timeout=(1, 2)).json()
-        return {"url": url, "ok": datos.get("servicio") == servicio, "contenedor": datos.get("contenedor"),
-                "nodo": datos.get("nodo"), "ms": round((time.perf_counter() - inicio) * 1000)}
+        return {"url": url, "letra": letra, "ok": datos.get("servicio") == servicio,
+                "contenedor": datos.get("contenedor"), "nodo": datos.get("nodo"),
+                "ms": round((time.perf_counter() - inicio) * 1000)}
     except (requests.exceptions.RequestException, ValueError):
-        return {"url": url, "ok": False}
+        return {"url": url, "letra": letra, "ok": False}
+
+
+def nodos_segun(url):
+    """Los nodos del clúster según la base de un computador, o None si no responde."""
+    try:
+        # timeout=1s: rqlite espera como mucho 1 s a cada nodo para saber si responde.
+        nodos = requests.get(f"{url}/nodes?ver=2&timeout=1s", timeout=(1, 4)).json()["nodes"]
+    except (requests.exceptions.RequestException, ValueError, KeyError):
+        replicas.marcar_caida(url)
+        return None
+    replicas.marcar_sana(url)
+    return nodos
 
 
 def miembros_bd():
-    """Pregunta a la base qué nodos tiene, cuáles responden y cuál es el líder."""
-    for url in replicas.ordenar(DB_URLS):
-        try:
-            # timeout=1s: rqlite espera como mucho 1 s a cada nodo para saber si responde.
-            nodos = requests.get(f"{url}/nodes?ver=2&timeout=1s", timeout=(1, 4)).json()["nodes"]
-        except (requests.exceptions.RequestException, ValueError, KeyError):
-            replicas.marcar_caida(url)
-            continue
-        replicas.marcar_sana(url)
-        # Un nodo que no responde no trae api_addr: se muestra su dirección de replicación.
-        return [{"id": n["id"], "direccion": n.get("api_addr") or n.get("addr"),
-                 "ok": n.get("reachable", False), "lider": n.get("leader", False),
-                 "votante": n.get("voter", True)} for n in nodos]
-    return []
+    """Qué nodos tiene el clúster, cuáles responden y cuál es el líder.
+
+    Se pregunta a la base de todos los computadores a la vez y se usa la
+    respuesta que conoce al líder. Un nodo que aún no se une responde una
+    lista vacía, y uno con una copia vieja puede creer que el clúster es otro:
+    por eso no basta con la primera respuesta.
+    """
+    with ThreadPoolExecutor(max_workers=max(len(DB_URLS), 1)) as hilos:
+        respuestas = list(hilos.map(nodos_segun, replicas.ordenar(DB_URLS)))
+    validas = [r for r in respuestas if r]
+    elegida = next((r for r in validas if any(n.get("leader") for n in r)), validas[0] if validas else [])
+    # Un nodo que no responde no trae api_addr: se muestra su dirección de replicación.
+    return [{"id": n["id"], "direccion": n.get("api_addr") or n.get("addr"),
+             "ok": n.get("reachable", False), "lider": n.get("leader", False),
+             "votante": n.get("voter", True)} for n in elegida]
 
 
 def nodo_sin_unir(posicion, ip):
@@ -96,7 +136,7 @@ def nodo_sin_unir(posicion, ip):
     Si su base responde, se usa el nombre que ella misma dice tener (nodo-D);
     si no, la letra que le toca por su posición en NODOS (A, B, C, D, E).
     """
-    letra = "ABCDEFGHIJ"[posicion] if posicion < 10 else str(posicion + 1)
+    letra = LETRAS[posicion] if posicion < len(LETRAS) else str(posicion + 1)
     try:
         estado = requests.get(f"http://{ip}:4001/status", timeout=(1, 2)).json()
         nombre, encendido = estado["store"]["node_id"], True
@@ -110,9 +150,8 @@ def nodos_bd():
     """Los nodos del clúster y, en el despliegue, también los computadores de
     NODOS que aún no se unen: así la página muestra siempre a los cinco."""
     miembros = miembros_bd()
-    ips = [ip.strip() for ip in os.environ.get("NODOS", "").split(",") if ip.strip()]
     en_cluster = {str(n["direccion"]).split("//")[-1].split(":")[0] for n in miembros}
-    faltan = [(i, ip) for i, ip in enumerate(ips) if ip not in en_cluster]
+    faltan = [(i, ip) for i, ip in enumerate(NODO_IPS) if ip not in en_cluster]
     if faltan:
         with ThreadPoolExecutor(max_workers=len(faltan)) as hilos:
             miembros += list(hilos.map(lambda par: nodo_sin_unir(*par), faltan))
@@ -122,11 +161,14 @@ def nodos_bd():
 @app.get("/api/cluster")
 def cluster():
     """Estado de todas las réplicas, consultadas en paralelo."""
-    with ThreadPoolExecutor(max_workers=16) as hilos:
-        futuros = {s: [hilos.submit(salud_de, s, url) for url in urls] for s, urls in SERVICIOS.items()}
+    with ThreadPoolExecutor(max_workers=24) as hilos:
+        futuros = {s: [hilos.submit(salud_de, s, url, i) for i, url in enumerate(urls)]
+                   for s, urls in SERVICIOS.items()}
+        interfaces = [hilos.submit(salud_de, "interfaz", url, i) for i, url in enumerate(INTERFACES)]
         bd = hilos.submit(nodos_bd)
         estado = {s: [f.result() for f in fs] for s, fs in futuros.items()}
-        return jsonify({"servicios": estado, "bd": bd.result(), "atendido_por": NODO})
+        return jsonify({"servicios": estado, "interfaz": [f.result() for f in interfaces],
+                        "bd": bd.result(), "atendido_por": NODO})
 
 
 @app.route("/api/<servicio>/<path:ruta>", methods=["GET", "POST", "PUT", "DELETE"])

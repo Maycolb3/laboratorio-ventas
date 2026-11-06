@@ -113,6 +113,15 @@
   .topologia .nodo.abajo .estado-punto { fill: var(--error); }
   .topologia .nodo.abajo .cuenta { fill: var(--error); }
   .topologia .paquete { filter: drop-shadow(0 0 5px currentColor); }
+  /* Fichas A, B, C, D, E: en qué nodos está en línea cada servicio */
+  .topologia .ficha { stroke-width: 1.2; }
+  .topologia .ficha.ok { fill: color-mix(in srgb, var(--ok) 18%, var(--superficie)); stroke: var(--ok); }
+  .topologia .ficha.mal { fill: color-mix(in srgb, var(--error) 14%, var(--superficie)); stroke: var(--error); }
+  .topologia .ficha.gris { fill: none; stroke: var(--tenue); stroke-dasharray: 3 2; }
+  .topologia .ficha.marca { stroke: var(--oro); stroke-width: 2.4; }
+  .topologia .ficha-letra { font: 700 9.5px var(--sans); fill: var(--tinta); }
+  .topologia .ficha-letra.mal { fill: var(--error); }
+  .topologia .ficha-letra.gris { fill: var(--tenue); }
 
   /* Base de datos: nodos vivos y líder */
   .bd-cabeza { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 12px; }
@@ -313,36 +322,44 @@
       </div>
       <div class="lienzo">
         <svg class="topologia" id="topologia" viewBox="0 0 700 300" role="img" aria-label="Diagrama de la arquitectura: interfaz, pedidos, usuarios, productos y base de datos">
+          <!-- Una sola línea por conexión: pedidos llega a la base en línea recta
+               por el centro, sin pasar junto a productos. -->
           <path class="arista" id="e-ip" d="M152 150 L200 150"/>
-          <path class="arista" id="e-pu" d="M332 140 C 362 140, 360 60, 390 60"/>
-          <path class="arista" id="e-pp" d="M332 160 C 362 160, 360 240, 390 240"/>
-          <path class="arista" id="e-ub" d="M522 60 C 542 60, 536 140, 556 140"/>
-          <path class="arista" id="e-qb" d="M522 240 C 542 240, 536 160, 556 160"/>
-          <path class="arista" id="e-pb" d="M266 182 C 266 292, 618 292, 618 182"/>
-          <g class="nodo" id="n-interfaz" style="--c: var(--interfaz)" transform="translate(20 118)">
-            <rect class="caja" width="132" height="64" rx="14"/><rect class="franja" x="14" y="15" width="5" height="16" rx="2.5"/>
+          <path class="arista" id="e-pu" d="M332 128 C 362 128, 360 56, 390 56"/>
+          <path class="arista" id="e-pp" d="M332 172 C 362 172, 360 244, 390 244"/>
+          <path class="arista" id="e-pb" d="M332 150 L556 150"/>
+          <path class="arista" id="e-ub" d="M522 56 C 542 56, 536 128, 556 128"/>
+          <path class="arista" id="e-qb" d="M522 244 C 542 244, 536 172, 556 172"/>
+          <!-- Cada caja muestra en qué nodos (A, B, C, D, E) está en línea ese servicio. -->
+          <g class="nodo" id="n-interfaz" style="--c: var(--interfaz)" transform="translate(20 108)">
+            <rect class="caja" width="132" height="84" rx="14"/><rect class="franja" x="14" y="15" width="5" height="16" rx="2.5"/>
             <text class="nombre" x="27" y="28">Interfaz</text>
             <circle class="estado-punto" cx="20" cy="46" r="4.6"/><text class="cuenta" x="30" y="50">en línea</text>
+            <g class="fichas" id="f-interfaz" transform="translate(8 60)"></g>
           </g>
-          <g class="nodo" id="n-pedidos" style="--c: var(--pedidos)" transform="translate(200 118)">
-            <rect class="caja" width="132" height="64" rx="14"/><rect class="franja" x="14" y="15" width="5" height="16" rx="2.5"/>
+          <g class="nodo" id="n-pedidos" style="--c: var(--pedidos)" transform="translate(200 108)">
+            <rect class="caja" width="132" height="84" rx="14"/><rect class="franja" x="14" y="15" width="5" height="16" rx="2.5"/>
             <text class="nombre" x="27" y="28">Pedidos</text>
             <circle class="estado-punto" cx="20" cy="46" r="4.6"/><text class="cuenta" x="30" y="50">en línea</text>
+            <g class="fichas" id="f-pedidos" transform="translate(8 60)"></g>
           </g>
-          <g class="nodo" id="n-usuarios" style="--c: var(--usuarios)" transform="translate(390 28)">
-            <rect class="caja" width="132" height="64" rx="14"/><rect class="franja" x="14" y="15" width="5" height="16" rx="2.5"/>
+          <g class="nodo" id="n-usuarios" style="--c: var(--usuarios)" transform="translate(390 14)">
+            <rect class="caja" width="132" height="84" rx="14"/><rect class="franja" x="14" y="15" width="5" height="16" rx="2.5"/>
             <text class="nombre" x="27" y="28">Usuarios</text>
             <circle class="estado-punto" cx="20" cy="46" r="4.6"/><text class="cuenta" x="30" y="50">en línea</text>
+            <g class="fichas" id="f-usuarios" transform="translate(8 60)"></g>
           </g>
-          <g class="nodo" id="n-productos" style="--c: var(--productos)" transform="translate(390 208)">
-            <rect class="caja" width="132" height="64" rx="14"/><rect class="franja" x="14" y="15" width="5" height="16" rx="2.5"/>
+          <g class="nodo" id="n-productos" style="--c: var(--productos)" transform="translate(390 202)">
+            <rect class="caja" width="132" height="84" rx="14"/><rect class="franja" x="14" y="15" width="5" height="16" rx="2.5"/>
             <text class="nombre" x="27" y="28">Productos</text>
             <circle class="estado-punto" cx="20" cy="46" r="4.6"/><text class="cuenta" x="30" y="50">en línea</text>
+            <g class="fichas" id="f-productos" transform="translate(8 60)"></g>
           </g>
-          <g class="nodo" id="n-bd" style="--c: var(--bd)" transform="translate(556 118)">
-            <rect class="caja" width="124" height="64" rx="14"/><rect class="franja" x="14" y="15" width="5" height="16" rx="2.5"/>
+          <g class="nodo" id="n-bd" style="--c: var(--bd)" transform="translate(556 108)">
+            <rect class="caja" width="132" height="84" rx="14"/><rect class="franja" x="14" y="15" width="5" height="16" rx="2.5"/>
             <text class="nombre" x="27" y="28">rqlite</text>
             <circle class="estado-punto" cx="20" cy="46" r="4.6"/><text class="cuenta" x="30" y="50">en línea</text>
+            <g class="fichas" id="f-bd" transform="translate(8 60)"></g>
           </g>
         </svg>
       </div>
@@ -686,13 +703,31 @@ $("limpiar-registro").addEventListener("click", () => {
   $("registro").innerHTML = `<li class="vacio">Sin solicitudes todavía.</li>`;
 });
 
-/* Estado del sistema (fachada): cada servicio se ve "en línea" o "caído", sin
-   mostrar sus réplicas. De la base de datos se muestran los nodos vivos y el líder. */
-function pintarNodo(id, enLinea) {
+/* Estado del sistema: cada servicio dice en cuántos nodos está en línea y, con
+   las fichas A-E, en cuáles. De la base de datos se muestran todos los nodos,
+   vivos o apagados, y el líder. */
+function pintarNodo(id, enLinea, texto) {
   const nodo = $(`n-${id}`);
   nodo.classList.toggle("abajo", !enLinea);
-  nodo.querySelector(".cuenta").textContent = enLinea ? "en línea" : "caído";
+  nodo.querySelector(".cuenta").textContent = texto || (enLinea ? "en línea" : "caído");
 }
+
+/* Fichas de una caja del diagrama: una por nodo (A, B, C, D, E), verde si ese
+   nodo tiene el servicio en línea, roja si está caído y gris si no se ha unido.
+   La marca dorada señala al líder de la base o a la interfaz que atiende. */
+function pintarFichas(id, fichas) {
+  const g = $(`f-${id}`);
+  if (!g) return;
+  const ancho = 20, sep = 4;
+  g.innerHTML = fichas.slice(0, 5).map((f, i) => {
+    const x = i * (ancho + sep);
+    return `<rect class="ficha ${f.estado}${f.marca ? " marca" : ""}" x="${x}" y="0" width="${ancho}" height="15" rx="4"><title>${escapar(f.titulo)}</title></rect>`
+      + `<text class="ficha-letra ${f.estado}" x="${x + ancho / 2}" y="11" text-anchor="middle">${escapar(f.letra)}</text>`;
+  }).join("");
+}
+const fichasDe = (lista) => (lista || [])
+  .map((r) => ({ letra: String(r.letra || "?"), estado: r.ok ? "ok" : "mal", titulo: `Nodo ${r.letra || "?"}: ${r.ok ? "en línea" : "caído"}` }))
+  .sort((a, b) => a.letra.localeCompare(b.letra));
 
 async function revisarCluster() {
   let c;
@@ -703,10 +738,16 @@ async function revisarCluster() {
   }
   const enLinea = {};
   SERVICIOS_UI.forEach((s) => {
-    enLinea[s.id] = (c.servicios[s.id] || []).some((r) => r.ok);
-    pintarNodo(s.id, enLinea[s.id]);
+    const lista = c.servicios[s.id] || [];
+    const vivos = lista.filter((r) => r.ok).length;
+    enLinea[s.id] = vivos > 0;
+    pintarNodo(s.id, enLinea[s.id], vivos ? `${vivos} de ${lista.length} en línea` : "caído");
+    pintarFichas(s.id, fichasDe(lista));
   });
-  pintarNodo("interfaz", true);
+  const interfaces = c.interfaz || [];
+  pintarNodo("interfaz", true, interfaces.length ? `${interfaces.filter((r) => r.ok).length} de ${interfaces.length} en línea` : "en línea");
+  pintarFichas("interfaz", fichasDe(interfaces).map((f) => f.letra === c.atendido_por
+    ? { ...f, marca: true, titulo: `${f.titulo} · atiende esta página` } : f));
 
   // Base de datos
   const nodos = c.bd || [];
@@ -719,7 +760,11 @@ async function revisarCluster() {
   const lider = nodos.find((n) => n.lider);
   const bdEnLinea = okBd >= necesarios;
   const letra = (id) => String(id).replace(/^rqlite-|^nodo-/, "");
-  pintarNodo("bd", bdEnLinea);
+  const estadoNodo = (n) => n.sin_unir ? (n.encendido ? "sin unir" : "apagado")
+    : !n.ok ? "caído" : n.lider ? "★ líder" : n.votante === false ? "respaldo" : "activo";
+  pintarNodo("bd", bdEnLinea, bdEnLinea ? `${okBd} de ${esperados} vivos` : "sin mayoría");
+  pintarFichas("bd", nodos.map((n) => ({ letra: letra(n.id), estado: n.sin_unir ? "gris" : n.ok ? "ok" : "mal",
+    marca: n.lider, titulo: `Nodo ${letra(n.id)}: ${estadoNodo(n).replace("★ ", "")}` })));
   const estadoBd = $("raft-estado");
   estadoBd.className = `bd-estado ${okBd === esperados ? "" : bdEnLinea ? "parcial" : "abajo"}`;
   estadoBd.textContent = bdEnLinea ? `${okBd} de ${esperados} nodos vivos` : "sin mayoría";
@@ -727,7 +772,7 @@ async function revisarCluster() {
   $("raft-lista").innerHTML = nodos.length === 0 ? `<li class="mal"><b>—</b><small>ningún nodo responde</small></li>`
     : nodos.map((n) => `<li class="${n.sin_unir ? "sin-unir" : n.ok ? "" : "mal"}${n.lider ? " lider" : ""}" title="${escapar(n.id)}">
         <b><span class="punto"></span>${escapar(letra(n.id))}</b>
-        <small>${n.sin_unir ? (n.encendido ? "uniéndose" : "sin unir") : !n.ok ? "caído" : n.lider ? "★ líder" : n.votante === false ? "respaldo" : "activo"}</small></li>`).join("");
+        <small>${estadoNodo(n)}</small></li>`).join("");
   $("tramos").innerHTML = Array.from({ length: esperados }, (_, i) => `<i class="${i < okBd ? "lleno" : ""}"></i>`).join("");
   const sinUnir = nodos.filter((n) => n.sin_unir).map((n) => letra(n.id));
   const faltan = sinUnir.length === 0 ? ""
